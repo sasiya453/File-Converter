@@ -11,6 +11,9 @@ const MIME: Record<string, string> = {
   flv: "video/x-flv", asf: "video/x-ms-asf", vob: "video/dvd", mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav",
   opus: "audio/ogg; codecs=opus", flac: "audio/flac", wma: "audio/x-ms-wma", oga: "audio/ogg", m4a: "audio/mp4", aac: "audio/aac",
   aiff: "audio/aiff", amr: "audio/amr",
+  ppt: "application/vnd.ms-powerpoint", pps: "application/vnd.ms-powerpoint", pot: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odp: "application/vnd.oasis.opendocument.presentation",
   svg: "image/svg+xml", ttf: "font/ttf", otf: "font/otf", woff: "font/woff", woff2: "font/woff2",
 };
 export const mimeFor = (ext: string) => MIME[ext.toLowerCase()] ?? "application/octet-stream";

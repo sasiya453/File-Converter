@@ -7,4 +7,5 @@ import "./image-special.js";
 import "./audio.js";
 import "./ebook.js";
 import "./comic.js";
+import "./presentation.js";
 export {};
