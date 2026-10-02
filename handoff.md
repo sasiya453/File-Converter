@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 17 - Audio → AUDIONOTE (commit 9ba6013)
+- Last completed task: 18 - eBook rows EPUB/MOBI/AZW3/LRF/PDB/FB2 (commit b70bd44)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -43,6 +43,7 @@
 - Task 15: `converter/src/handlers/image-special.ts`: `SPECIAL_ROWS` (a copy of the matrix rows; a test asserts it equals matrix.json). Each source is normalised and then sent through the generic image.ts handlers (`generic()`): HEIC/AVIF/PSD → IM with an explicit coder (`HEIC:in[0]`; fallbacks `heif-convert`, `avifdec`) → PNG32. EPS → Ghostscript (`-dSAFER -dEPSCrop pngalpha 150 dpi`; EPS→PDF uses gs pdfwrite = vector). SVG → `rsvg-convert` PNG (SVG→PDF uses rsvg-convert -f pdf = vector). APNG → ffmpeg `-f apng` (frame 0 for still targets; →GIF/WEBP/MP4 keep the animation via palettegen GIF). TGS → gunzip (16 MB cap, 422 if invalid) → `lottie_convert.py` GIF → **re-encoded with ffmpeg** (python-lottie GIFs have palette indices that ImageMagick rejects) → gif / webp (animated, IM) / apng / gifz. GIFZ zip = `animation.gif` + `frames/frame-000.png…`. Fixtures `sample.{heic,avif,psd,eps,svg,apng,tgs}` (the heic/avif/psd/eps/svg ones contain the text "Hello Converter" for OCR). `tests/image-special.test.ts`: 81 tests. **The IMAGE section is now complete (207).**
 - Task 16: `converter/src/handlers/audio.ts`: `AUDIO_SOURCES` (11 rows incl. amr), `AUDIO_TARGETS` (10), `AUDIO_ARGS` table (mp3 = MP3_ARGS, ogg/oga = libvorbis q5 `-f ogg`, opus = libopus 128k 48 kHz `-f opus`, wav = pcm_s16le, flac, wma = wmav2 `-f asf`, m4a = aac `-f ipod` faststart, aac = ADTS, aiff = pcm_s16be). `encodeAudio(ext, args)` is a generic handler (ffprobe check → 422 "the file has no audio stream"; `-map 0:a:0 -vn` drops cover art; metadata kept). Exported `hasAudioStream()`. Every non-diagonal audio→audio cell is ✓. MIME types added for opus/flac/wma/oga/m4a/aac/aiff/amr. Fixtures `sample.{mp3,ogg,opus,wav,flac,wma,oga,m4a,aac,aiff,amr}` (0.5 s 440 Hz mono). The AMR fixture was made with `sox -t amr-nb` because the sandbox ffmpeg has no AMR encoder, only the decoder (that is all the bot needs, since AMR is only a source). `tests/audio.test.ts`: 103 tests, ~50 s.
 - Task 17 (in `audio.ts`): `register(AUDIO_SOURCES, "audionote", encodeAudio("ogg", VOICE_ARGS))` makes OGG/Opus mono 48 kHz 48k voip `converted.ogg`, which the Worker sends via sendVoice. There is no duration cap (Telegram voice has no hard length limit; the 50 MB output cap still applies). audio.test.ts: 114 tests. **The AUDIO section is now complete (111).**
+- Task 18: `converter/src/handlers/ebook.ts`: `EBOOK_ROWS` (a copy of the matrix rows for epub, mobi, azw3, lrf, pdb, fb2; a test asserts it equals matrix.json) are all registered with `toEbook` from document.ts (Calibre `ebook-convert` handles PDF/DOCX/TXT/RTF and every e-book target; OEB is zipped). Non-diagonal ✗: mobi→lrf. Fixtures `sample.{epub,mobi,azw3,lrf,pdb,fb2}` made with `ebook-convert sample.txt sample.<ext>`. `tests/ebook.test.ts` (66 tests, ~65 s) checks the magic bytes/markers per target and "Hello Converter" in the pdf/docx/txt/rtf/fb2 outputs. **The DJVU row was moved to Task 19** (it needs djvulibre preprocessing, because Calibre has no DJVU input plugin for text-less DJVU).
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -86,7 +87,7 @@
 - [x] Task 15 - Special image sources: TGS, HEIC, AVIF, PSD, EPS, SVG, APNG
 - [x] Task 16 - Audio → audio
 - [x] Task 17 - Audio → AUDIONOTE
-- [ ] Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF
+- [x] Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF (DJVU row moved to Task 19)
 - [ ] Task 19 - CBR, CBZ, DJVU rows
 - [ ] Task 20 - Presentations
 - [ ] Task 21 - Fonts
@@ -95,7 +96,7 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF** (rows epub, mobi, azw3, lrf, pdb, fb2, djvu; leave cbr/cbz/djvu-specific work to Task 19 if djvu needs djvulibre). Make tiny fixtures with Calibre from `tests/fixtures/sample.txt` (`ebook-convert sample.txt sample.epub` etc.), and assert "Hello Converter" in each output.
+- Start at: **Task 19 - CBR, CBZ → PDF; DJVU → pdf,docx,txt,rtf,epub,mobi,azw3,lrf,oeb,pdb,fb2,rb**. Plan: new `converter/src/handlers/comic.ts`. CBZ = unzip (`7z x` or `unzip`), CBR = `unrar x` / `7z x` (bookworm `unrar` is non-free; 7z can't do RAR5 without rar plugins, so try both). Then sort the images naturally and use ImageMagick `magick()` (`converter/src/tools/imagemagick.ts`) or `img2pdf` to build the PDF. Guard against zip-slip and too many files (extract into workDir/x, reject `..`, cap the count at e.g. 1000). DJVU: `ddjvu -format=pdf` → PDF; for the text targets use `djvutxt` (422 if empty), then TXT → the other targets through `textToLibreOffice`/`textToEbook` (document.ts) or a txt → Calibre path. Fixtures: CBZ = zip of 2 small PNGs; CBR needs `rar` (probably unavailable; then make the fixture with a RAR binary if installable, else skip the test with a reason); DJVU via `c44 sample.ppm sample.djvu` (image-only, so the text targets return 422) and/or `djvused` to add a hidden text layer (`set-txt`) so the text targets work. djvulibre-bin is installed in the sandbox (`ddjvu`, `djvutxt`, `c44`, `cjb2`, `djvused`).
 - Reuse `toEbook`/`EBOOK_TARGETS` and `toLibreOffice` from `converter/src/handlers/document.ts` and `ebookConvert` from `converter/src/tools/calibre.ts`. Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.ebook.rows;for(const k in r)console.log(k,r[k].join(","))'`.
 - Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`.
 - Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document/ebook tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). sox (`sudo apt-get install -y sox libsox-fmt-all`) is only needed to regenerate the AMR fixture. Docker is unavailable.
