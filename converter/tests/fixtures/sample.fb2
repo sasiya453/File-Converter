@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+<description>
+    <title-info>
+        <genre>antique</genre>
+        <author><first-name></first-name><last-name>Converter</last-name></author>
+        <book-title>Sample</book-title>
+        <lang>C</lang>
+    </title-info>
+    <document-info>
+        <author><first-name></first-name><last-name>Converter</last-name></author>
+        <program-used>calibre 8.5.0</program-used>
+        <date>2.10.2026</date>
+        <id>f114c897-e66c-4d51-a8a7-4b2c84cfdb3f</id>
+        <version>1.0</version>
+    </document-info>
+    <publish-info>
+    </publish-info>
+</description>
+<body>
+<section>
+<p>Hello Converter</p>
+<p>Second line with üñíçødé.</p>
+</section>
+</body>
+
+</FictionBook>

@@ -5,4 +5,5 @@ import "./video.js";
 import "./image.js";
 import "./image-special.js";
 import "./audio.js";
+import "./ebook.js";
 export {};
