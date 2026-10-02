@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 9 - Video → video containers (commit 1c2669d)
+- Last completed task: 10 - Video → GIF, VIDEONOTE, STREAM (commit 5c3700e)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -35,6 +35,7 @@
 - Task 7: `rtf->{pdf,doc,docx,txt,odt}` via `toLibreOffice`, `rtf->EBOOK_TARGETS` via `toEbook`. Fixture `sample.rtf` (made from sample.docx with soffice).
 - Task 8: `odt->{pdf,doc,docx,txt,rtf}` via `toLibreOffice`, `odt->EBOOK_TARGETS` via `toEbook`. Fixture `sample.odt`. The DOCUMENT section is now complete except TORRENT (Task 24).
 - Task 9: `converter/src/handlers/video.ts`: `VIDEO_SOURCES` (14 rows), `VIDEO_CONTAINER_TARGETS` (10), `VIDEO_ARGS` table (muxer + codecs per target; always re-encodes: H.264/AAC for mp4/mov/mkv/flv/ts/3gp, MPEG-4 Part 2 + MP3 for avi, WMV2/WMA2 for wmv, MPEG-2/MP2 for mpg, VP8/Opus for webm), an even-size scale filter, `-map 0:v:0 -map 0:a:0?` (audio optional). Exported `ffmpeg(args, ctx)` helper (reuse it in Tasks 10/11/16). Non-diagonal ✗ in the rows: 3gpp→3gp, mpeg→mpg, vob→mkv (the `SKIP` map). Fixtures `tests/fixtures/sample.<14 video exts>` (0.5 s 64x48 testsrc + sine). `tests/video.test.ts` checks registry == matrix for container targets and ffprobes each output (format, video+audio streams); 128 tests pass in ~50 s.
+- Task 10 (also in `video.ts`): `videoToGif` (first 15 s, 10 fps, width ≤ 480, palettegen/paletteuse, loop), `videoToVideoNote` (center crop to square, 640x640, `-t 60`, H.264/AAC faststart → `converted.mp4`), `videoToStream` (width ≤ 1280, H.264/AAC faststart MP4). Registered for all 14 video sources. Tests check gif format, h264, 640x640, ≤ 60 s, and moov before mdat.
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -43,6 +44,7 @@
 - PDF → PNG/JPG (decision): no extra "all pages" button. A single-page PDF returns the image and a multi-page PDF returns a ZIP of all pages (150 DPI). This keeps the keyboard = matrix.
 - OEB output is a directory: the converter zips it (`converted.oeb.zip`) and `delivery.ts` maps `oeb` → ext `oeb.zip` (so the user gets `<name>.oeb.zip`).
 - PDF → RTF goes through pdf2docx then LO (LO's direct PDF import is Draw-based and gives text boxes, not flowing text).
+- Video → GIF is limited to the first 15 s (to keep it under 50 MB). Video notes are cut at 60 s (Telegram limit).
 - GIFZ = animated GIF frames packaged as a ZIP (assumption, as the brief says). In the matrix only TGS → GIFZ is ✓.
 - TGS row (from the image): WEBP, GIF, GIFZ, APNG only (no MP4).
 - QT.TXT is detected by the double extension `.qt.txt`.
@@ -68,7 +70,7 @@
 - [x] Task 7 - RTF → all ✓ document targets
 - [x] Task 8 - ODT → all ✓ document targets
 - [x] Task 9 - Video → video containers
-- [ ] Task 10 - Video → GIF, VIDEONOTE, STREAM
+- [x] Task 10 - Video → GIF, VIDEONOTE, STREAM
 - [ ] Task 11 - Video → MP3, AUDIO NOTE
 - [ ] Task 12 - Image raster → raster
 - [ ] Task 13 - Image → PDF, SENDPHOTO, OCR
@@ -85,7 +87,7 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 10 - Video → GIF, VIDEONOTE, STREAM**. Add to `converter/src/handlers/video.ts` (reuse `ffmpeg()`, `VIDEO_SOURCES`; every video row has ✓ for gif, videonote, stream). Plan: gif = palettegen/paletteuse, fps 10, width ≤ 480, cap duration (e.g. 15 s) to stay under 50 MB; videonote = `crop=min(iw\,ih):min(iw\,ih),scale=640:640`, H.264/AAC, `-t 60`, faststart, `converted.mp4`; stream = H.264/AAC MP4 `+faststart` (max 1280 wide). `delivery.ts` already maps videonote→sendVideoNote and stream→sendVideo(supports_streaming), so no Worker change is needed. Extend `tests/video.test.ts` (ffprobe: gif format; videonote 640x640 and ≤60 s; stream mp4 with moov before mdat).
+- Start at: **Task 11 - Video → MP3, AUDIO NOTE**. Add to `converter/src/handlers/video.ts`: `mp3` = `-vn -map 0:a:0 -c:a libmp3lame -q:a 2` (return a 422 HttpError "no audio track" if the input has no audio; check it with ffprobe or catch the ffmpeg map error); `audionote` = `-vn -map 0:a:0 -ac 1 -c:a libopus -b:a 48k -f ogg converted.ogg` (delivery.ts maps audionote→sendVoice ext ogg). Every video row has ✓ for both. Put the opus/mp3 arg sets somewhere reusable for Tasks 16/17 (e.g. `src/handlers/audio-args.ts`). Add a no-audio fixture test for the 422.
 - Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`. The document handlers are in `converter/src/handlers/document.ts`.
 - Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). Docker is unavailable.
 - Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/video.test.ts`. Worker: `cd worker && npx vitest run`.
