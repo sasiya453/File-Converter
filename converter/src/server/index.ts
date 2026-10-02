@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
@@ -58,6 +58,13 @@ async function download(url: string, dest: string, signal: AbortSignal): Promise
   await pipeline(Readable.fromWeb(res.body as never), limiter, createWriteStream(dest));
 }
 
+/** Per-job private dir under WORK_ROOT (created on demand: /tmp is empty on a fresh HF container). */
+export async function newWorkDir(): Promise<string> {
+  const root = process.env.WORK_ROOT ?? tmpdir();
+  await mkdir(root, { recursive: true });
+  return mkdtemp(join(root, "job-"));
+}
+
 function sendError(res: ServerResponse, status: number, message: string) {
   if (res.headersSent) { res.destroy(); return; }
   res.writeHead(status, { "content-type": "application/json" });
@@ -77,7 +84,7 @@ async function handleConvert(req: IncomingMessage, res: ServerResponse): Promise
   const options = body.options && typeof body.options === "object" ? (body.options as Record<string, unknown>) : {};
 
   const signal = AbortSignal.timeout(LIMITS.timeoutMs);
-  const workDir = await mkdtemp(join(process.env.WORK_ROOT ?? tmpdir(), "job-"));
+  const workDir = await newWorkDir();
   const started = Date.now();
   try {
     const input = join(workDir, `input.${from}`); // fixed name: never use user-supplied filenames on disk

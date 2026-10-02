@@ -15,6 +15,6 @@ export async function ebookConvert(input: string, workDir: string, ext: string, 
 /** Zip the contents of a directory (e.g. OEB output) into `<dir>.zip`. */
 export async function zipDir(dir: string, workDir: string, signal: AbortSignal): Promise<string> {
   const zipPath = `${dir}.zip`;
-  await run("zip", ["-r", "-q", "-X", zipPath, "."], { cwd: dir, signal });
+  await run("zip", ["-r", "-q", "-X", zipPath, "."], { cwd: dir, home: workDir, signal });
   return zipPath;
 }

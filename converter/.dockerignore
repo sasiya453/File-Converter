@@ -1,3 +1,8 @@
 node_modules
 dist
 tests
+tests/fixtures
+.git
+.env
+.env.*
+*.log

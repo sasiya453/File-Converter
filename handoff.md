@@ -1,6 +1,7 @@
 # Handoff
 ## Project status
-- Last completed task: 24 - TORRENT → TXT + final hardening (commits dd1f20d = 24a, 0bb4105 = 24b). **ALL TASKS (0–24) ARE DONE.**
+- Phase 1 (Tasks 0–24): DONE.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H0**. Next: **H1**.
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -102,8 +103,26 @@
 - [x] Task 23 - Subtitles
 - [x] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
+## Phase 2 checklist (HF Docker Space + Cloudflare Workers)
+- [x] H0 - HF-compatible Docker image (uid 1000, PORT 7860, /tmp/work, per-job HOME/XDG, Space README, .dockerignore) — **built and tested with Docker**
+- [ ] H1 - Async job API in the converter (POST /jobs, queue, idempotency, Telegram delivery, error mapping, expiry, redacted logs)
+- [ ] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
+- [ ] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
+- [ ] H4 - Slim the image (measure, remove unneeded tools, record sizes)
+- [ ] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
+- [ ] H6 - Docs, smoke-test script, final verification
+
+## Phase 2 notes
+- **Docker in the sandbox:** it is not preinstalled, but `sudo apt-get install -y docker.io` and then `sudo dockerd > /tmp/dockerd.log 2>&1 &` work (Debian trixie host, overlay2). Use `sudo docker …`.
+- **H0 result (2026-10-02):** `docker build -t file-converter converter` succeeds (all apt + pip package names are valid on bookworm; image = **2.7 GB**). The container runs as `uid=1000(node)`, listens on :7860, and `/health` → `{"ok":true,"conversions":887}`.
+  The full converter suite was run **inside the image** as uid 1000 with a read-only rootfs + /tmp tmpfs, using the repo mounted read-only:
+  `sudo docker run --rm --read-only --tmpfs /tmp:rw,exec,size=3g,uid=1000,gid=1000 -v $PWD:/repo:ro -w /repo/converter --entrypoint sh file-converter -c "node --import tsx --test --test-concurrency=1 --test-reporter=dot tests/*.test.ts"` → **934 tests, 0 failures** (~17 min). (Mount the whole repo, because the tests read `../worker/src/matrix/matrix.json`.)
+- `run.ts` `toolEnv(home)`: every tool gets HOME/TMPDIR/XDG_*/MAGICK_TEMPORARY_PATH/CALIBRE_* pointed at the job dir, plus QT_QPA_PLATFORM=offscreen and QTWEBENGINE sandbox off (Calibre PDF output). LibreOffice already uses a per-job `-env:UserInstallation`.
+- `server/index.ts` `newWorkDir()` creates WORK_ROOT on demand (a fresh HF container has an empty /tmp).
+- Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
+
 ## Next agent instructions
-- **The task list is complete.** No unchecked task remains. Do not redo tasks.
+- **Phase 2:** do the first unchecked H task in the Phase 2 checklist. Phase 1 is complete; do not redo it.
 - Verified on 2026-10-02: worker typecheck + 29 vitest tests pass; converter typecheck + torrent + matrix-coverage tests pass; `check-matrix` = 89 sources / 887 conversions (the +13 vs 874 mismatch is documented above).
 - Possible follow-ups (only if the user asks): (1) build the converter Docker image on a machine with Docker and fix any apt package names; (2) a real end-to-end deploy (wrangler secrets, `scripts/set-webhook.ts`); (3) decide with the user which 13 cells to drop if the count must be exactly 874; (4) an optional CloudConvert adapter in `worker/src/converter/` (`makeConverter`).
 - Note: the welcome screenshot is `docs/welcome-message.jpg` (not .png). `WELCOME_HTML` in `worker/src/messages.ts` matches it.
