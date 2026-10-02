@@ -8,4 +8,5 @@ import "./audio.js";
 import "./ebook.js";
 import "./comic.js";
 import "./presentation.js";
+import "./font.js";
 export {};

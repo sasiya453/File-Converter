@@ -15,5 +15,6 @@ const MIME: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   odp: "application/vnd.oasis.opendocument.presentation",
   svg: "image/svg+xml", ttf: "font/ttf", otf: "font/otf", woff: "font/woff", woff2: "font/woff2",
+  eot: "application/vnd.ms-fontobject", pfb: "application/x-font-type1",
 };
 export const mimeFor = (ext: string) => MIME[ext.toLowerCase()] ?? "application/octet-stream";

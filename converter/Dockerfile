@@ -36,6 +36,7 @@ RUN for f in /etc/ImageMagick-6/policy.xml; do \
 RUN useradd --create-home --uid 10001 converter && mkdir -p /work && chown converter /work
 WORKDIR /app
 COPY --from=build /app/dist ./dist
+COPY py ./py
 COPY package.json ./
 USER converter
 ENV NODE_ENV=production PORT=8080 WORK_ROOT=/work JOB_TIMEOUT_MS=120000
