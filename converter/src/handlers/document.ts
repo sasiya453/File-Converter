@@ -119,3 +119,7 @@ register(["txt", "text"], EBOOK_TARGETS, textToEbook);
 // Task 7: RTF row (matrix: PDF, DOC, DOCX, TXT, ODT + all e-book targets).
 register("rtf", ["pdf", "doc", "docx", "txt", "odt"], toLibreOffice);
 register("rtf", EBOOK_TARGETS, toEbook);
+
+// Task 8: ODT row (matrix: PDF, DOC, DOCX, TXT, RTF + all e-book targets).
+register("odt", ["pdf", "doc", "docx", "txt", "rtf"], toLibreOffice);
+register("odt", EBOOK_TARGETS, toEbook);
