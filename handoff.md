@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 12 - Image raster → raster (commit 0980e76)
+- Last completed task: 13 - Image → PDF, SENDPHOTO, OCR (commit b1c5591)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -38,6 +38,7 @@
 - Task 10 (also in `video.ts`): `videoToGif` (first 15 s, 10 fps, width ≤ 480, palettegen/paletteuse, loop), `videoToVideoNote` (center crop to square, 640x640, `-t 60`, H.264/AAC faststart → `converted.mp4`), `videoToStream` (width ≤ 1280, H.264/AAC faststart MP4). Registered for all 14 video sources. Tests check gif format, h264, 640x640, ≤ 60 s, and moov before mdat.
 - Task 11 (in `video.ts`): `extractAudio(ext, args)` checks for an audio stream with ffprobe (422 "the video has no audio track" otherwise; the Worker maps 422 to its "unsupported" message), then `mp3` (`MP3_ARGS`, libmp3lame V2) or `audionote` (`VOICE_ARGS`: OGG/Opus mono 48 kHz 48k voip → `converted.ogg`). Reusable arg sets are in `converter/src/tools/audio-args.ts`. Fixture `noaudio.mp4`. The VIDEO section is now complete (197 conversions; 200 tests in tests/video.test.ts, ~75 s).
 - Task 12: `converter/src/tools/imagemagick.ts`: `magick(args, cwd, signal)` uses IM7 `magick` when present, else IM6 `convert` (the Docker image is bookworm = IM6), with `-limit` resource caps. `identify()` works the same way. `converter/src/handlers/image.ts`: `RASTER_SOURCES`/`RASTER_TARGETS` (png,jpg,jpeg,jp2,webp,bmp,tif,tiff,gif,ico) → `rasterToRaster`. It always writes with an explicit coder prefix (`JPEG:out`), uses frame `[0]` for still targets (the LARGEST frame for ICO sources), flattens JPG on white, uses LZW for TIFF, and downscales ICO to ≤256 px (`256x256>`). GIF↔WEBP keeps the animation (`-coalesce`), falling back to the first frame if that fails. Fixtures `sample.{png,jpg,jpeg,jp2,webp,bmp,tif,tiff,gif,ico}` (32x24; gif/webp have 3 frames, ico is 32+16). `tests/image.test.ts`: registry == matrix for raster targets + format/size/frame checks (91 tests, ~5 s). Reuse `magick()` and `RASTER_SOURCES` in Tasks 13–15.
+- Task 13 (in `image.ts`): `imageToPdf` (1 page, frame 0 or the largest ICO frame, flattened on white, JPEG-compressed, `PDF:` coder), `imageToSendPhoto` (JPEG q85, ≤ 2560 px on the long side, `converted.jpg`), `imageToOcr` (grayscale PNG upscaled to ≥ 1000 px → `tesseract … -l eng` → `converted.txt`, 422 when empty; optional `options.lang` validated by regex). Registered for all 10 raster rows (OCR is ✗ for gif/ico). These handlers are generic, so Task 15 can register them for HEIC/AVIF/PSD/EPS/SVG/APNG if IM can read those (otherwise pre-convert to PNG first). OCR fixtures `tests/fixtures/ocr.{png,jpg,jpeg,jp2,webp,bmp,tif,tiff}` ("Hello Converter"). image.test.ts now has 122 tests.
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -75,7 +76,7 @@
 - [x] Task 10 - Video → GIF, VIDEONOTE, STREAM
 - [x] Task 11 - Video → MP3, AUDIO NOTE
 - [x] Task 12 - Image raster → raster
-- [ ] Task 13 - Image → PDF, SENDPHOTO, OCR
+- [x] Task 13 - Image → PDF, SENDPHOTO, OCR
 - [ ] Task 14 - Image → MP4, GIFZ, APNG (only ✓)
 - [ ] Task 15 - Special image sources: TGS, HEIC, AVIF, PSD, EPS, SVG, APNG
 - [ ] Task 16 - Audio → audio
@@ -89,7 +90,7 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 13 - Image → PDF, SENDPHOTO, OCR**. Check the rows: `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.image.rows;for(const k in r)console.log(k,r[k].join(","))'`. In this task, register pdf/sendphoto/ocr ONLY for `RASTER_SOURCES` from `converter/src/handlers/image.ts` (note: ico has no OCR and gif has no OCR in the matrix; special sources TGS/HEIC/AVIF/PSD/EPS/SVG/APNG belong to Task 15). Plan: PDF via `magick in[0] ... PDF:out` (or img2pdf if present; IM6 in Docker needs the PDF policy relaxed, which the Dockerfile already does). SENDPHOTO = JPG flattened on white, ≤ 2560 px on the long side, quality 85, `converted.jpg` (check `worker/src/matrix/delivery.ts` for the expected ext). OCR = convert to grayscale PNG, then `tesseract in.png out -l eng` → `converted.txt`; return 422 when the text is empty. Tesseract may need `sudo apt-get install -y tesseract-ocr` in the sandbox. Make an OCR fixture with `magick -size 400x100 xc:white -pointsize 36 -annotate +10+60 'Hello Converter' ocr.png`.
+- Start at: **Task 14 - Image → MP4, GIFZ, APNG (only ✓)**. Raster rows in the matrix: APNG is ✓ for png,jpg,jpeg,jp2,webp,bmp,tif,tiff,gif (✗ for ico). MP4 is ✓ only for gif (and apng, but APNG is a Task 15 source). GIFZ is ✓ only for tgs (Task 15), so Task 14 has NO gifz registrations; just note this. Plan: in `image.ts`, `toApng`: for gif/webp (animated) use `ffmpeg -i in -plays 0 -f apng converted.png`; for still images make a 1-frame APNG (ffmpeg `-f apng`). Output filename `converted.apng`, MIME `image/apng` (add it to mime.ts; check that `delivery.ts` default ext = `apng`). `gif->mp4`: ffmpeg `-movflags +faststart -pix_fmt yuv420p -vf scale=trunc(iw/2)*2:trunc(ih/2)*2 -c:v libx264`. Reuse `ffmpeg()` from `video.ts`. Note: ffmpeg can't decode animated WebP (only stills), so for animated webp → apng, coalesce to a GIF with IM first. Tests: check the `acTL` chunk in APNG output, and ffprobe h264 for mp4.
 - Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`. The document handlers are in `converter/src/handlers/document.ts`.
 - Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). Docker is unavailable.
 - Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/video.test.ts`. Worker: `cd worker && npx vitest run`.
