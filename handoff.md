@@ -1,20 +1,22 @@
 # Handoff
 ## Project status
 - Phase 1 (Tasks 0–24): DONE.
-- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H5**. Next: **H6**.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): DONE** (2026-10-02). Remaining items need the repo owner (see Known issues: enable the workflows, real deploy).
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
 - Node 22. Each package has its own `npm i`.
 - Worker (`/worker`): `npm test` (vitest), `npm run typecheck`, `npx wrangler dev` (needs `.dev.vars`, copy from `.dev.vars.example`), `npx wrangler deploy`. Dry-run bundle check: `npx wrangler deploy --dry-run --outdir /tmp/wout`.
-- Converter (`/converter`): `npm test` (node:test via tsx), `npm run typecheck`, `CONVERTER_TOKEN=dev npm run dev` (listens on :8080).
-  Docker: `docker build -t file-converter converter && docker run -p 8080:8080 -e CONVERTER_TOKEN=... file-converter`.
+- Converter (`/converter`): `npm test` (node:test via tsx, full suite, needs the tools), `npm run test:fast` (68 API/queue/security tests, no tools), `npm run typecheck`, `CONVERTER_TOKEN=dev npm run dev` (listens on PORT, default 7860).
+  Docker: `docker build -t file-converter converter && docker run -p 7860:7860 -e CONVERTER_TOKEN=... -e BOT_TOKEN=... file-converter` (listens on 7860; `npm run dev` also defaults to PORT 7860).
+- Smoke test: `cd converter && npx tsx ../scripts/smoke-test.ts --fake` (fake Telegram, spawns the converter), `--external=<url>` (a running converter/Docker image wired to the fake servers on 18081/18082), or real mode with CONVERTER_URL/CONVERTER_TOKEN/BOT_TOKEN/CHAT_ID.
 - Matrix: `cd worker && npx tsx ../scripts/check-matrix.ts`. Re-extract from PNG: `python3 scripts/extract-matrix.py` (needs Pillow, numpy, scipy).
 - Webhook: `BOT_TOKEN=.. WEBHOOK_SECRET=.. WORKER_URL=.. npx tsx scripts/set-webhook.ts` (run from `worker/` so tsx resolves). This also sets the /start and /menu commands and the commands menu button.
 - Worker secrets: BOT_TOKEN, WEBHOOK_SECRET, CONVERTER_URL, CONVERTER_TOKEN (`wrangler secret put`). KV binding: SESSIONS. Var: RATE_LIMIT_PER_MIN.
 - Converter env: CONVERTER_TOKEN (required), BOT_TOKEN (required for /jobs), ALLOWED_URL_PREFIXES (default `https://api.telegram.org/file/`, SSRF guard), PORT (7860), WORK_ROOT (/tmp/work), MAX_CONCURRENT_JOBS (2), MAX_QUEUE (20), JOB_MAX_AGE_MS (600000), JOB_TIMEOUT_MS (fallback 120000) + JOB_TIMEOUT_<FAMILY>_MS, MIN_FREE_DISK_MB (1024), FFMPEG_THREADS (2), TOOL_MAX_MEM_MB (4096), TOOL_MAX_FILE_MB (2048), TOOL_NICE (10), USE_PRLIMIT (1), TELEGRAM_API_BASE (tests).
 
 ## Architecture notes (what exists)
+- **Current runtime flow (Phase 2):** Worker callback → POST `{CONVERTER_URL}/jobs` (202) → the converter queues, converts, uploads the result to Telegram itself and deletes the status message. The Phase-1 notes below that mention the Worker uploading the result / calling `/convert` describe the old flow; see "Phase 2 notes" for the current one.
 - `worker/src/index.ts`: `/webhook/<secret>` + header `X-Telegram-Bot-Api-Secret-Token` check (constant-time), returns 200 at once, does the work in `ctx.waitUntil(processUpdate)`. `/health` returns ok.
 - `worker/src/flow/intake.ts`: /start, /menu, /help and the text "menu" send WELCOME_HTML. For files: extract (document/photo/video/audio/voice/video_note/animation/sticker), apply the 20 MB guard (exact message in `messages.ts`), detect the format (name → MIME → magic-byte sniff of the first 512 bytes via a Range request), save the KV session (TTL 1h), show the keyboard.
 - `worker/src/flow/callback.ts`: full pipeline (done in Task 1): decode → session → matrix check (✗ is rejected) → rate limit (`RATE_LIMIT_PER_MIN`, default 5) → answerCallback → "⏳ Converting…" → getFile URL → `converter.convert({fileUrl, from, to: target, options:{section}})` → `tg.upload(deliveryFor(section,target))` with filename `outputName(original, ext)` → delete the status message. ConverterError kinds map to messages via `errorMessage()`. The converter is injectable (4th param) for tests. **New conversions need NO Worker changes**; just add converter handlers (and, for special targets, check `matrix/delivery.ts`).
@@ -71,6 +73,8 @@
 - Converter Docker base: node:22-bookworm-slim + apt tools + a Python venv at /opt/py (fonttools, brotli, pysubs2, lottie, cairosvg, pillow-heif).
 
 ## Known issues / BLOCKED items
+- **Not yet done for real (needs accounts/secrets):** an actual HF Space build + Cloudflare deploy + a real Telegram end-to-end run. Everything was verified locally (Docker image, fake Telegram). Follow README → Deployment, then the smoke-test checklist.
+- HF Space cold start: if the Space needs more than ~28 s to wake up, the Worker shows CONVERTER_UNAVAILABLE and the user presses the button again (the dedupe key is deleted on failure). The 20-minute cron keep-alive makes this rare. HF can still restart the Space (e.g. on rebuild); queued in-memory jobs are then lost and their status message stays at "⏳ Converting…" (no persistent queue by design).
 - **BLOCKED (needs the repo owner):** GitHub Actions workflows are in `ci/github-workflows/`; move them to `.github/workflows/` (the agent's GitHub App token has no `workflows` permission).
 - **Matrix count mismatch:** the extracted matrix has 886 ✓ cells + TORRENT→TXT = **887**, but the bot advertises 874 (diff +13). Unique source formats = 89, which matches. Per section: document 84, video 197, image 207, audio 111, ebook 79, presentation 54, font 36, sheet 9, subtitle 110. The image is the source of truth, so all 887 are offered. We did not guess which 13 to drop.
 - Docker image: bookworm's IM6 may not read HEIC/AVIF; fallbacks `heif-convert` (libheif-examples) and `avifdec` (libavif-bin) are in the Dockerfile but untested there. Also check that `lottie_convert.py` is on PATH from /opt/py/bin.
@@ -111,7 +115,7 @@
 - [x] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
 - [x] H4 - Slim the image (measure, remove unneeded tools, record sizes) — 2.7 GB → 2.14 GB, 992/992 tests in the image
 - [x] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
-- [ ] H6 - Docs, smoke-test script, final verification
+- [x] H6 - Docs, smoke-test script, final verification
 
 ## Phase 2 notes
 - **Docker in the sandbox:** it is not preinstalled, but `sudo apt-get install -y docker.io` and then `sudo dockerd > /tmp/dockerd.log 2>&1 &` work (Debian trixie host, overlay2). Use `sudo docker …`.
@@ -152,11 +156,14 @@
   - Verified: the full suite in `fc:slim` (uid 1000, `--read-only`, /tmp tmpfs) → **992 tests, 0 failures, 0 skipped**; /health OK on :7860.
   - Biggest remaining items: libqt6webenginecore6 (150 MB, a Calibre dep needed for e-book → PDF), libreoffice-core, libllvm15 (mesa, pulled by Qt). Further cuts would need dropping functionality.
 - **H5 (CI/CD):** ⚠️ The workflows live in **`ci/github-workflows/`**: pushing `.github/workflows/*` was rejected (`refusing to allow a GitHub App to create or update workflow … without workflows permission`). The repo owner must run `git mv ci/github-workflows .github/workflows` with their own credentials (README → CI/CD). Files: `test.yml` (PR + push: worker typecheck/vitest/check-matrix; converter typecheck/build/`npm run test:fast` = jobs, server, resources, torrent, matrix-coverage, 68 tests, no external tools needed), `deploy-hf.yml` (converter/** on main: fast tests, then clone `https://user:$HF_TOKEN@huggingface.co/spaces/$HF_SPACE`, `rsync -a --delete` converter/ minus tests/ node_modules/ dist/ .env*, check Dockerfile + `sdk: docker` front matter, commit, push; the token is masked and sed-redacted from git output), `deploy-worker.yml` (worker/** on main: npm ci, test, typecheck, fails early if the KV id placeholder is still in wrangler.toml, `npx wrangler deploy` with CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID). The rsync/commit step was simulated locally against a bare git repo; the workflows have NOT run on GitHub yet (they need the secrets). tests/ is excluded from the Space because HF rejects binary fixtures without LFS/Xet, and the image doesn't use them. The README has a "CI/CD" section listing every GitHub secret.
+- **H6 (docs + verification):** README rewritten for this stack (how it works with async jobs; HF Space creation, Space secrets, manual or CI push; Worker KV/secrets/deploy; set-webhook; smoke-test checklist: each family, 20 MB+, >50 MB output, busy queue via `MAX_QUEUE=1`, sleeping Space, log redaction). `scripts/smoke-test.ts` (fake / external / real modes; asserts /health keys, 401, 202, duplicate jobId ignored, delivery method + `.ext` + reply_parameters, status message deleted, token not in logs). **Fixed a pre-existing bug:** `scripts/*.ts` with top-level await (set-webhook.ts) failed under tsx because `scripts/` had no package.json (CJS); added `scripts/package.json` with `"type": "module"`. The fake smoke test was added to `ci/github-workflows/test.yml`.
+  - Final verification (2026-10-02): worker typecheck + 46 vitest tests + `wrangler deploy --dry-run` (48.5 KiB) OK; converter typecheck + test:fast 68/68; full converter suite in the slim image 992/992 (H4); `check-matrix` = 89 sources / 887 conversions (unchanged); smoke test OK both against the local source (`--fake`) and against the built `fc:final` image (`--external`, read-only rootfs, uid 1000): job_queued → job_ok, no token/URL in the logs.
 - Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
 
 ## Next agent instructions
-- **Phase 2:** do the first unchecked H task in the Phase 2 checklist. Phase 1 is complete; do not redo it.
-- Verified on 2026-10-02 (after H2): worker typecheck + 46 vitest tests pass; converter typecheck + torrent + matrix-coverage tests pass; `check-matrix` = 89 sources / 887 conversions (the +13 vs 874 mismatch is documented above).
-- Possible follow-ups (only if the user asks): (1) build the converter Docker image on a machine with Docker and fix any apt package names; (2) a real end-to-end deploy (wrangler secrets, `scripts/set-webhook.ts`); (3) decide with the user which 13 cells to drop if the count must be exactly 874; (4) an optional CloudConvert adapter in `worker/src/converter/` (`makeConverter`).
+- **Phase 1 and Phase 2 are complete.** Do not redo them. Only work on new requests from the user.
+- Owner to-do list (give it to the user if asked): (1) `git mv ci/github-workflows .github/workflows` and push with their own credentials; (2) set the GitHub secrets HF_TOKEN, HF_SPACE, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; (3) create the Space + its secrets CONVERTER_TOKEN, BOT_TOKEN; (4) the KV namespace id in `worker/wrangler.toml` + the Worker secrets; (5) `scripts/set-webhook.ts`; (6) README smoke-test checklist.
+- Verified on 2026-10-02 (after H6): see the H6 notes above (worker 46 tests, converter fast 68 + full 992 in Docker, check-matrix 89/887).
+- Possible follow-ups (only if the user asks): decide which 13 cells to drop if the count must be exactly 874; an optional CloudConvert adapter in `worker/src/converter/` (`makeConverter`); a persistent job queue if Space restarts become a problem; further image slimming would need dropping Calibre's QtWebEngine (e-book → PDF) or similar functionality.
 - Note: the welcome screenshot is `docs/welcome-message.jpg` (not .png). `WELCOME_HTML` in `worker/src/messages.ts` matches it.
-- Sandbox: run `npm ci` in `worker/` and `converter/`. The full converter suite needs LibreOffice, Calibre, FontForge, etc. (see the earlier notes) and takes several minutes (`timeout 900 npm test`). `git push` needs `setup_github_environment` first.
+- Sandbox: run `npm ci` in `worker/` and `converter/`. Docker: `sudo apt-get install -y docker.io && sudo sh -c 'dockerd > /tmp/dockerd.log 2>&1 &'`. The full converter suite is best run inside the image (command in the H0 notes, ~17 min). `git push` needs `setup_github_environment` first, and pushing `.github/workflows/*` is rejected for the agent token.

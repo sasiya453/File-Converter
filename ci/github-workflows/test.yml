@@ -47,3 +47,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:fast
+      - name: Smoke test (fake Telegram, async /jobs flow)
+        run: npx tsx ../scripts/smoke-test.ts --fake
