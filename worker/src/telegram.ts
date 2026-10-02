@@ -43,21 +43,6 @@ export class Telegram {
     return data.result;
   }
 
-  /** Multipart upload (sendDocument/sendPhoto/sendVideo/...). */
-  async upload<T = unknown>(method: string, field: string, file: Blob, filename: string,
-    params: Record<string, string | number | boolean>): Promise<T> {
-    const form = new FormData();
-    for (const [k, v] of Object.entries(params)) form.append(k, String(v));
-    form.append(field, file, filename);
-    const res = await this.fetchImpl(`https://api.telegram.org/bot${this.token}/${method}`, {
-      method: "POST",
-      body: form,
-    });
-    const data = (await res.json()) as { ok: boolean; result: T; description?: string };
-    if (!data.ok) throw new TelegramApiError(method, res.status, data.description ?? "unknown");
-    return data.result;
-  }
-
   sendMessage(chatId: number, text: string, extra: Record<string, unknown> = {}) {
     return this.call<TgMessage>("sendMessage", {
       chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra,
@@ -66,6 +51,12 @@ export class Telegram {
 
   answerCallback(id: string, text?: string) {
     return this.call("answerCallbackQuery", { callback_query_id: id, ...(text ? { text } : {}) });
+  }
+
+  editMessageText(chatId: number, messageId: number, text: string) {
+    return this.call("editMessageText", {
+      chat_id: chatId, message_id: messageId, text, parse_mode: "HTML", disable_web_page_preview: true,
+    });
   }
 
   deleteMessage(chatId: number, messageId: number) {

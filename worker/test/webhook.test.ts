@@ -20,3 +20,27 @@ describe("webhook auth", () => {
     expect((await worker.fetch(post("/webhook/s3cret", "s3cret"), env, ctx)).status).toBe(200);
   });
 });
+
+import { keepAlive } from "../src/index";
+
+describe("cron keep-alive", () => {
+  it("GETs {CONVERTER_URL}/health", async () => {
+    const urls: string[] = [];
+    const f = (async (u: string) => { urls.push(u); return new Response('{"ok":true}'); }) as unknown as typeof fetch;
+    const r = await keepAlive({ ...env, CONVERTER_URL: "https://u-s.hf.space/" } as Env, f);
+    expect(r).toEqual({ ok: true, status: 200 });
+    expect(urls).toEqual(["https://u-s.hf.space/health"]);
+  });
+  it("never throws", async () => {
+    const f = (async () => { throw new TypeError("down"); }) as unknown as typeof fetch;
+    expect((await keepAlive({ ...env, CONVERTER_URL: "https://x" } as Env, f)).ok).toBe(false);
+    expect((await keepAlive(env)).ok).toBe(false);
+  });
+  it("scheduled() schedules the ping with waitUntil", async () => {
+    const waits: Promise<unknown>[] = [];
+    const c = { waitUntil: (p: Promise<unknown>) => waits.push(p) } as unknown as ExecutionContext;
+    await worker.scheduled!({} as ScheduledController, env, c);
+    expect(waits).toHaveLength(1);
+    await waits[0];
+  });
+});

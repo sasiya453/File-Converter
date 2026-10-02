@@ -1,7 +1,7 @@
 # Handoff
 ## Project status
 - Phase 1 (Tasks 0–24): DONE.
-- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H1**. Next: **H2**.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H2**. Next: **H3**.
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -106,7 +106,7 @@
 ## Phase 2 checklist (HF Docker Space + Cloudflare Workers)
 - [x] H0 - HF-compatible Docker image (uid 1000, PORT 7860, /tmp/work, per-job HOME/XDG, Space README, .dockerignore) — **built and tested with Docker**
 - [x] H1 - Async job API in the converter (POST /jobs, queue, idempotency, Telegram delivery, error mapping, expiry, redacted logs)
-- [ ] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
+- [x] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
 - [ ] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
 - [ ] H4 - Slim the image (measure, remove unneeded tools, record sizes)
 - [ ] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
@@ -127,11 +127,18 @@
   - `src/shared/job-messages.ts` = **byte-identical copy** of `worker/src/shared/job-messages.ts` (the user-facing texts + `errorText(kind)`); `tests/jobs.test.ts` asserts they are equal.
   - `POST /jobs` → 202 `{jobId, position}`; 401 bad token; 400 invalid payload; 422 unknown conversion; 429 queue full. `GET /health` (and `/`) → `{ok, queued, running}` only. Logs: `job_queued`, `job_ok`, `job_fail` (jobId, from, to, section, kind, bytes, ms; msg is redacted), `job_rejected`. File URLs are never logged.
   - `tests/jobs.test.ts` (39 tests, ~2 s) uses a fake Telegram server (`http.createServer`, parses multipart with `Request.formData()`): every delivery method, the ZIP → .zip rule, every error kind (incl. a sparse 51 MB output), download failure, upload failure, duplicate jobId, 429, expiry, invalid payloads, token redaction in logs.
+- **H2 (Worker side of async jobs):**
+  - `worker/src/converter/client.ts`: `ConverterClient` = `submitJob(job, {onWaking})` (default path) + `convert()` (sync /convert fallback, `SyncConverterClient`). `JobRequest` matches the converter's `validateJob`. `ConverterError` kinds now also include `busy` (429) and `unavailable` (Space unreachable after retries).
+  - `worker/src/converter/async.ts`: `AsyncJobClient` (the `makeConverter` default). One POST /jobs per attempt, 25 s attempt timeout, 2 retries with backoff 3 s / 6 s, a 28 s overall deadline (inside the ~30 s waitUntil budget). Retries on network error/timeout, 502/503/504, and a non-JSON 2xx (HF's HTML "starting" page); each of those triggers `onWaking` once. 429 → `busy`; 422 → `unsupported`; other 4xx → `failed` (no retry). `HttpConverterClient` (sync) is kept.
+  - `worker/src/flow/callback.ts`: session → matrix check → KV dedupe (`job:<jobId>`, 10 min; jobId = `cq_<callback_query.id>`, so a retried webhook is ignored by both the Worker and the converter) → rate limit → "⏳ Converting…" → getFile → `submitJob` (status edited to `CONVERTER_WAKING` while waking) → return. On submit failure: edit the status message (`CONVERTER_BUSY` / `CONVERTER_UNAVAILABLE` / `errorText(kind)`), delete the dedupe key so the user can press again. **No upload/delete in the Worker any more** (`Telegram.upload` removed; `editMessageText` added). The job carries `replyToMessageId` = the user's file message (saved in the session as `messageId` by intake).
+  - `worker/src/messages.ts` re-exports the job texts from `shared/job-messages.ts` (single source). New shared text `CONVERTER_UNAVAILABLE` (both copies; byte-identity tested in both packages: `worker/test/errors.test.ts` and `converter/tests/jobs.test.ts`).
+  - Cron keep-alive: `wrangler.toml` `[triggers] crons = ["*/20 * * * *"]` → `scheduled()` → `keepAlive(env)` = GET `{CONVERTER_URL}/health` (25 s timeout, never throws, logs `keepalive`).
+  - Tests: `worker/test/async-client.test.ts`, `callback.test.ts` (rewritten), `errors.test.ts`, `webhook.test.ts` (+cron). 46 vitest tests pass; typecheck + `wrangler deploy --dry-run` OK.
 - Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
 
 ## Next agent instructions
 - **Phase 2:** do the first unchecked H task in the Phase 2 checklist. Phase 1 is complete; do not redo it.
-- Verified on 2026-10-02: worker typecheck + 29 vitest tests pass; converter typecheck + torrent + matrix-coverage tests pass; `check-matrix` = 89 sources / 887 conversions (the +13 vs 874 mismatch is documented above).
+- Verified on 2026-10-02 (after H2): worker typecheck + 46 vitest tests pass; converter typecheck + torrent + matrix-coverage tests pass; `check-matrix` = 89 sources / 887 conversions (the +13 vs 874 mismatch is documented above).
 - Possible follow-ups (only if the user asks): (1) build the converter Docker image on a machine with Docker and fix any apt package names; (2) a real end-to-end deploy (wrangler secrets, `scripts/set-webhook.ts`); (3) decide with the user which 13 cells to drop if the count must be exactly 874; (4) an optional CloudConvert adapter in `worker/src/converter/` (`makeConverter`).
 - Note: the welcome screenshot is `docs/welcome-message.jpg` (not .png). `WELCOME_HTML` in `worker/src/messages.ts` matches it.
 - Sandbox: run `npm ci` in `worker/` and `converter/`. The full converter suite needs LibreOffice, Calibre, FontForge, etc. (see the earlier notes) and takes several minutes (`timeout 900 npm test`). `git push` needs `setup_github_environment` first.

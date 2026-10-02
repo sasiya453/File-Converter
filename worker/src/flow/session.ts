@@ -6,6 +6,7 @@ export interface Session {
   source: string;          // detected source format, e.g. "pdf"
   sections: Section[];     // sections in which the source appears
   fileSize?: number;
+  messageId?: number;      // the user's file message (the converter replies to it)
   createdAt: number;
 }
 

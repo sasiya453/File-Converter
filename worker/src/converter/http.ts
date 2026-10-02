@@ -1,4 +1,4 @@
-import { ConverterError, type ConverterClient, type ConvertRequest, type ConvertResult } from "./client";
+import { ConverterError, type SyncConverterClient, type ConvertRequest, type ConvertResult } from "./client";
 
 const MAX_OUTPUT = 50 * 1024 * 1024;
 
@@ -10,8 +10,8 @@ function filenameFromDisposition(h: string | null): string | undefined {
   return plain?.[1];
 }
 
-/** Talks to our self-hosted /converter service (see /converter). */
-export class HttpConverterClient implements ConverterClient {
+/** Synchronous POST /convert client (local testing / fallback; the bot uses AsyncJobClient). */
+export class HttpConverterClient implements SyncConverterClient {
   constructor(private baseUrl: string, private token: string, private timeoutMs = 130_000,
     private fetchImpl: typeof fetch = fetch) {}
 

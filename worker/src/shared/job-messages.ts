@@ -8,6 +8,8 @@ export type JobErrorKind = "unsupported" | "too_large" | "timeout" | "invalid_in
 export const CONVERTING = "⏳ Converting…";
 export const CONVERTER_WAKING = "⏳ Waking up the converter, please wait…";
 export const CONVERTER_BUSY = "🚦 The converter is busy right now. Please try again in a minute.";
+export const CONVERTER_UNAVAILABLE =
+  "😴 The converter is starting up or unavailable right now. Please try again in a minute.";
 export const JOB_EXPIRED = "⌛ Sorry, the converter was too busy and your request expired. Please send the file again.";
 
 export const UNSUPPORTED_HTML =

@@ -31,14 +31,12 @@ https://i.imgur.com/pPMbJKL.png`;
 export const TOO_LARGE_HTML =
   `You can't send files above greater than 20MB due to <a href="https://core.telegram.org/bots/api#getfile">Telegram API limit</a>.`;
 
-export const UNSUPPORTED_HTML =
-  "❌ This file format is not supported. Send /start to see the list of supported formats.";
 export const NO_FILE_HTML = "Please send me a file to convert. Send /start to see the supported formats.";
 export const SESSION_EXPIRED = "⌛ This request expired. Please send the file again.";
-export const CONVERTING = "⏳ Converting…";
-export const CONVERSION_FAILED = "❌ Conversion failed. Please try another format or file.";
-export const CONVERSION_TIMEOUT = "⌛ Conversion timed out. Please try a smaller file.";
 export const RATE_LIMITED = "🐢 Too many conversions. Please wait a minute and try again.";
-export const INVALID_INPUT =
-  "❌ This file can't be converted to that format. It may be damaged, password-protected, or missing the needed content (for example no text, no audio track or no images).";
-export const RESULT_TOO_LARGE = "❌ The converted file is larger than 50 MB and can't be sent via Telegram.";
+
+// Conversion-job texts are shared byte-for-byte with the converter (it edits the status message itself).
+export {
+  CONVERTING, CONVERTER_WAKING, CONVERTER_BUSY, CONVERTER_UNAVAILABLE, JOB_EXPIRED, UNSUPPORTED_HTML, CONVERSION_FAILED,
+  CONVERSION_TIMEOUT, INVALID_INPUT, RESULT_TOO_LARGE, errorText,
+} from "./shared/job-messages";

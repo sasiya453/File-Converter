@@ -51,7 +51,7 @@ export async function handleMessage(env: Env, tg: Telegram, msg: TgMessage): Pro
   }
   const groups = targetsFor(source);
   await saveSession(env.SESSIONS, chatId, {
-    fileId: file.fileId, fileName: file.fileName, source, fileSize: file.fileSize,
+    fileId: file.fileId, fileName: file.fileName, source, fileSize: file.fileSize, messageId: msg.message_id,
     sections: groups.map((g) => g.section), createdAt: Date.now(),
   });
   await tg.sendMessage(chatId, `Detected <b>${source.toUpperCase()}</b>. Convert to:`, {

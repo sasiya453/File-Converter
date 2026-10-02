@@ -8,6 +8,10 @@ compatibility_date = "2024-11-01"
 binding = "SESSIONS"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
+# Keep-alive: ping the converter's /health every 20 minutes so the free HF Space stays awake.
+[triggers]
+crons = ["*/20 * * * *"]
+
 [vars]
 RATE_LIMIT_PER_MIN = "5"
 
