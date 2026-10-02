@@ -20,14 +20,14 @@ RUN sed -i 's/Components: main/Components: main contrib non-free/' /etc/apt/sour
       tesseract-ocr tesseract-ocr-eng \
       inkscape librsvg2-bin \
       libheif-examples libavif-bin \
-      djvulibre-bin unrar p7zip-full zip unzip \
+      djvulibre-bin unrar p7zip-full p7zip-rar zip unzip \
       python3 python3-pip python3-venv \
       fonts-dejavu fonts-liberation fonts-noto-core \
       ca-certificates tini \
  && rm -rf /var/lib/apt/lists/*
 # Python tools: fontTools(+brotli for woff2), pysubs2 (subtitles), lottie (TGS rendering)
 RUN python3 -m venv /opt/py && /opt/py/bin/pip install --no-cache-dir \
-      "fonttools[woff]" brotli pysubs2 "lottie[gif]" cairosvg pillow pillow-heif pdf2docx
+      "fonttools[woff]" brotli pysubs2 "lottie[gif]" cairosvg pillow pillow-heif pdf2docx img2pdf
 ENV PATH="/opt/py/bin:${PATH}"
 # Relax ImageMagick policy for PDF/EPS (Ghostscript), keep resource limits.
 RUN for f in /etc/ImageMagick-6/policy.xml; do \
