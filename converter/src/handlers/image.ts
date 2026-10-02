@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { run } from "../run.js";
+import { ffmpeg } from "./video.js";
 import { register } from "../registry.js";
 import { mimeFor } from "../mime.js";
 import { magick, identify } from "../tools/imagemagick.js";
@@ -105,3 +106,51 @@ export async function imageToOcr(ctx: JobContext): Promise<JobOutput> {
 register(RASTER_SOURCES, "pdf", imageToPdf);
 register(RASTER_SOURCES, "sendphoto", imageToSendPhoto);
 register(RASTER_SOURCES.filter((s) => s !== "gif" && s !== "ico"), "ocr", imageToOcr);
+
+// ---- Task 14: image -> APNG, MP4 (GIFZ is ✓ only for TGS, see Task 15) ----
+
+/** Number of frames ImageMagick sees in the input. */
+async function frameCount(ctx: JobContext): Promise<number> {
+  const { stdout } = await identify(["-format", "x", ctx.input], ctx.workDir, ctx.signal);
+  return stdout.trim().length;
+}
+
+/**
+ * Normalise an image to something ffmpeg decodes: GIF as is; animated WebP -> coalesced GIF
+ * (ffmpeg cannot decode animated WebP); any still image -> PNG of frame 0.
+ */
+async function ffmpegReadable(ctx: JobContext): Promise<{ path: string; animated: boolean }> {
+  if (ctx.from === "gif") return { path: ctx.input, animated: (await frameCount(ctx)) > 1 };
+  if (ctx.from === "webp" && (await frameCount(ctx)) > 1) {
+    const gif = join(ctx.workDir, "frames.gif");
+    await magick([ctx.input, "-coalesce", `GIF:${gif}`], ctx.workDir, ctx.signal);
+    return { path: gif, animated: true };
+  }
+  const png = join(ctx.workDir, "frame.png");
+  await magick([`${ctx.input}[0]`, "-auto-orient", `PNG32:${png}`], ctx.workDir, ctx.signal);
+  return { path: png, animated: false };
+}
+
+/** APNG output (always has an acTL chunk). Still images become a 2-frame (identical) looping APNG. */
+export async function imageToApng(ctx: JobContext): Promise<JobOutput> {
+  const src = await ffmpegReadable(ctx);
+  const out = join(ctx.workDir, "converted.apng");
+  const input = src.animated ? ["-i", src.path] : ["-loop", "1", "-framerate", "1", "-i", src.path, "-frames:v", "2"];
+  await ffmpeg([...input, "-plays", "0", "-f", "apng", out], ctx);
+  return { path: out, contentType: mimeFor("apng"), filename: "converted.apng" };
+}
+
+/** Animated image -> H.264 MP4 (faststart, yuv420p, even size, transparent areas on white). */
+export async function imageToMp4(ctx: JobContext): Promise<JobOutput> {
+  const src = await ffmpegReadable(ctx);
+  const out = join(ctx.workDir, "converted.mp4");
+  const input = src.animated ? ["-i", src.path] : ["-loop", "1", "-framerate", "1", "-i", src.path, "-t", "3"];
+  await ffmpeg([...input, "-filter_complex",
+    "color=white,format=rgb24[bg];[bg][0:v]scale2ref[bg2][fg];[bg2][fg]overlay=shortest=1,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart", "-an", out], ctx);
+  return { path: out, contentType: mimeFor("mp4"), filename: "converted.mp4" };
+}
+
+// Matrix: APNG ✓ for every raster row except ICO; MP4 ✓ only for GIF among raster rows.
+register(RASTER_SOURCES.filter((s) => s !== "ico"), "apng", imageToApng);
+register("gif", "mp4", imageToMp4);

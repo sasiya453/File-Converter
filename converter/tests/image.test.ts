@@ -93,3 +93,35 @@ test("sendphoto downscales big images to 2560 px", { skip: !hasIM && "no ImageMa
 test("ocr on a blank image returns 422", { skip: !hasTool("tesseract") && "no tesseract" }, async () => {
   await assert.rejects(convertFixture("sample.bmp", "ocr"), (e: { status?: number }) => e.status === 422);
 });
+
+// ---- Task 14: APNG, MP4 (GIFZ only exists for TGS -> Task 15) ----
+const SPECIAL14 = ["apng", "mp4", "gifz"];
+
+test("apng/mp4/gifz registry matches the matrix for raster rows", () => {
+  for (const src of RASTER_SOURCES) for (const to of SPECIAL14) {
+    assert.equal(!!lookup(src, to), rows[src]!.includes(to), `${src}->${to}`);
+  }
+});
+
+const probeFrames = (p: string) => {
+  const r = spawnSync("ffprobe", ["-v", "error", "-count_frames", "-show_entries", "stream=codec_name,width,height,nb_read_frames", "-of", "json", p]);
+  return JSON.parse(r.stdout.toString()).streams[0] as { codec_name: string; width: number; height: number; nb_read_frames: string };
+};
+
+for (const src of RASTER_SOURCES) for (const to of ["apng", "mp4"].filter((t) => rows[src]!.includes(t))) {
+  test(`${src} -> ${to}`, { skip: !(hasIM && hasTool("ffmpeg")) && "tools not installed" }, async () => {
+    const { out, cleanup } = await convertFixture(`sample.${src}`, to);
+    try {
+      const s = probeFrames(out.path);
+      assert.equal(out.filename, `converted.${to}`);
+      if (to === "apng") {
+        assert.ok(readFileSync(out.path).includes("acTL"), "has acTL (animated PNG)");
+        assert.equal(s.codec_name, "apng");
+        assert.equal(Number(s.nb_read_frames), src === "gif" || src === "webp" ? 3 : 2, "frames");
+      } else {
+        assert.equal(s.codec_name, "h264");
+        assert.deepEqual([s.width, s.height], [32, 24]);
+      }
+    } finally { await cleanup(); }
+  });
+}
