@@ -14,6 +14,8 @@ const MIME: Record<string, string> = {
   ppt: "application/vnd.ms-powerpoint", pps: "application/vnd.ms-powerpoint", pot: "application/vnd.ms-powerpoint",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   odp: "application/vnd.oasis.opendocument.presentation",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
   svg: "image/svg+xml", ttf: "font/ttf", otf: "font/otf", woff: "font/woff", woff2: "font/woff2",
   eot: "application/vnd.ms-fontobject", pfb: "application/x-font-type1",
 };

@@ -9,4 +9,5 @@ import "./ebook.js";
 import "./comic.js";
 import "./presentation.js";
 import "./font.js";
+import "./sheet.js";
 export {};
