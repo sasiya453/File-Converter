@@ -78,3 +78,24 @@ for (const to of ["png", "jpg"]) {
     } finally { await cleanup(); }
   });
 }
+
+// Task 4: DOC -> PDF, DOCX, TXT, RTF, ODT
+const odtText = (p: string) => spawnSync("python3", ["-c",
+  "import sys,zipfile,re;print(re.sub(r'<[^>]+>','',zipfile.ZipFile(sys.argv[1]).read('content.xml').decode()))", p]).stdout.toString();
+const DOC_CHECKS: Record<string, (p: string) => Promise<string>> = {
+  pdf: async (p) => spawnSync("pdftotext", [p, "-"]).stdout.toString(),
+  docx: async (p) => textOf(p),
+  txt: (p) => readFile(p, "utf8"),
+  rtf: (p) => readFile(p, "utf8"),
+  odt: async (p) => odtText(p),
+};
+for (const [to, text] of Object.entries(DOC_CHECKS)) {
+  test(`doc -> ${to}`, { skip: !hasTool("soffice") && "soffice not installed" }, async () => {
+    const { out, cleanup } = await convertFixture("sample.doc", to);
+    try {
+      assert.equal(out.filename, `converted.${to}`);
+      assert.ok((await stat(out.path)).size > 0);
+      assert.match(await text(out.path), /Hello Converter/);
+    } finally { await cleanup(); }
+  });
+}

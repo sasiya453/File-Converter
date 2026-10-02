@@ -60,3 +60,25 @@ export const EBOOK_TARGETS = ["epub", "mobi", "azw3", "lrf", "oeb", "pdb", "fb2"
 register("pdf", "txt", pdfToTxt);
 register("pdf", "rtf", pdfToRtf);
 register("pdf", EBOOK_TARGETS, toEbook);
+
+/** LibreOffice Writer export filters per target (no quotes: argv, not a shell). */
+export const LO_WRITER_FILTERS: Record<string, string> = {
+  pdf: "pdf:writer_pdf_Export",
+  doc: "doc:MS Word 97",
+  docx: "docx:MS Word 2007 XML",
+  rtf: "rtf:Rich Text Format",
+  odt: "odt:writer8",
+  txt: "txt:Text (encoded):UTF8",
+};
+
+/** Generic Writer-family conversion with headless LibreOffice (DOC/DOCX/TXT/RTF/ODT sources). */
+export async function toLibreOffice(ctx: JobContext): Promise<JobOutput> {
+  const filter = LO_WRITER_FILTERS[ctx.to];
+  if (!filter) throw new HttpError(400, `no LibreOffice filter for ${ctx.to}`);
+  const p = await soffice(ctx.input, ctx.workDir, filter, ctx.signal);
+  if (!(await nonEmpty(p))) throw new HttpError(422, "LibreOffice produced an empty file");
+  return out(p, ctx.to);
+}
+
+// Task 4: DOC row (matrix: PDF, DOCX, TXT, RTF, ODT; all other targets are ✗).
+register("doc", ["pdf", "docx", "txt", "rtf", "odt"], toLibreOffice);
