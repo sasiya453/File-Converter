@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 10 - Video → GIF, VIDEONOTE, STREAM (commit 5c3700e)
+- Last completed task: 11 - Video → MP3, AUDIO NOTE (commit d625e5f)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -36,6 +36,7 @@
 - Task 8: `odt->{pdf,doc,docx,txt,rtf}` via `toLibreOffice`, `odt->EBOOK_TARGETS` via `toEbook`. Fixture `sample.odt`. The DOCUMENT section is now complete except TORRENT (Task 24).
 - Task 9: `converter/src/handlers/video.ts`: `VIDEO_SOURCES` (14 rows), `VIDEO_CONTAINER_TARGETS` (10), `VIDEO_ARGS` table (muxer + codecs per target; always re-encodes: H.264/AAC for mp4/mov/mkv/flv/ts/3gp, MPEG-4 Part 2 + MP3 for avi, WMV2/WMA2 for wmv, MPEG-2/MP2 for mpg, VP8/Opus for webm), an even-size scale filter, `-map 0:v:0 -map 0:a:0?` (audio optional). Exported `ffmpeg(args, ctx)` helper (reuse it in Tasks 10/11/16). Non-diagonal ✗ in the rows: 3gpp→3gp, mpeg→mpg, vob→mkv (the `SKIP` map). Fixtures `tests/fixtures/sample.<14 video exts>` (0.5 s 64x48 testsrc + sine). `tests/video.test.ts` checks registry == matrix for container targets and ffprobes each output (format, video+audio streams); 128 tests pass in ~50 s.
 - Task 10 (also in `video.ts`): `videoToGif` (first 15 s, 10 fps, width ≤ 480, palettegen/paletteuse, loop), `videoToVideoNote` (center crop to square, 640x640, `-t 60`, H.264/AAC faststart → `converted.mp4`), `videoToStream` (width ≤ 1280, H.264/AAC faststart MP4). Registered for all 14 video sources. Tests check gif format, h264, 640x640, ≤ 60 s, and moov before mdat.
+- Task 11 (in `video.ts`): `extractAudio(ext, args)` checks for an audio stream with ffprobe (422 "the video has no audio track" otherwise; the Worker maps 422 to its "unsupported" message), then `mp3` (`MP3_ARGS`, libmp3lame V2) or `audionote` (`VOICE_ARGS`: OGG/Opus mono 48 kHz 48k voip → `converted.ogg`). Reusable arg sets are in `converter/src/tools/audio-args.ts`. Fixture `noaudio.mp4`. The VIDEO section is now complete (197 conversions; 200 tests in tests/video.test.ts, ~75 s).
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -71,7 +72,7 @@
 - [x] Task 8 - ODT → all ✓ document targets
 - [x] Task 9 - Video → video containers
 - [x] Task 10 - Video → GIF, VIDEONOTE, STREAM
-- [ ] Task 11 - Video → MP3, AUDIO NOTE
+- [x] Task 11 - Video → MP3, AUDIO NOTE
 - [ ] Task 12 - Image raster → raster
 - [ ] Task 13 - Image → PDF, SENDPHOTO, OCR
 - [ ] Task 14 - Image → MP4, GIFZ, APNG (only ✓)
@@ -87,7 +88,7 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 11 - Video → MP3, AUDIO NOTE**. Add to `converter/src/handlers/video.ts`: `mp3` = `-vn -map 0:a:0 -c:a libmp3lame -q:a 2` (return a 422 HttpError "no audio track" if the input has no audio; check it with ffprobe or catch the ffmpeg map error); `audionote` = `-vn -map 0:a:0 -ac 1 -c:a libopus -b:a 48k -f ogg converted.ogg` (delivery.ts maps audionote→sendVoice ext ogg). Every video row has ✓ for both. Put the opus/mp3 arg sets somewhere reusable for Tasks 16/17 (e.g. `src/handlers/audio-args.ts`). Add a no-audio fixture test for the 422.
+- Start at: **Task 12 - Image raster → raster** (PNG, JPG, JPEG, JP2, WEBP, BMP, TIF, TIFF, GIF, ICO rows). Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.image.rows;for(const k in r)console.log(k,r[k].join(","))'` and register only the raster targets in this task (pdf/sendphoto/ocr = Task 13; mp4/gifz/apng = Task 14). Plan: new `converter/src/handlers/image.ts` using ImageMagick (`convert` or `magick`; check which one exists, since Debian bookworm ships IM6 `convert`). Use `input[0]` for single-frame targets (except gif→gif-like), ICO resized to ≤256 (`-resize 256x256>`), JPG flattened onto white (`-background white -alpha remove`), and JP2 via openjpeg (check `convert -list format | grep -i jp2`). Check that ImageMagick's policy.xml does not block anything you need. Make tiny fixtures with `convert -size 16x16 xc:red sample.png`, etc. Remember to add MIME types (jp2, etc.) in `src/mime.ts`.
 - Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`. The document handlers are in `converter/src/handlers/document.ts`.
 - Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). Docker is unavailable.
 - Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/video.test.ts`. Worker: `cd worker && npx vitest run`.
