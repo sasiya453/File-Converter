@@ -1,7 +1,7 @@
 # Handoff
 ## Project status
 - Phase 1 (Tasks 0–24): DONE.
-- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H0**. Next: **H1**.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H1**. Next: **H2**.
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -105,7 +105,7 @@
 
 ## Phase 2 checklist (HF Docker Space + Cloudflare Workers)
 - [x] H0 - HF-compatible Docker image (uid 1000, PORT 7860, /tmp/work, per-job HOME/XDG, Space README, .dockerignore) — **built and tested with Docker**
-- [ ] H1 - Async job API in the converter (POST /jobs, queue, idempotency, Telegram delivery, error mapping, expiry, redacted logs)
+- [x] H1 - Async job API in the converter (POST /jobs, queue, idempotency, Telegram delivery, error mapping, expiry, redacted logs)
 - [ ] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
 - [ ] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
 - [ ] H4 - Slim the image (measure, remove unneeded tools, record sizes)
@@ -119,6 +119,14 @@
   `sudo docker run --rm --read-only --tmpfs /tmp:rw,exec,size=3g,uid=1000,gid=1000 -v $PWD:/repo:ro -w /repo/converter --entrypoint sh file-converter -c "node --import tsx --test --test-concurrency=1 --test-reporter=dot tests/*.test.ts"` → **934 tests, 0 failures** (~17 min). (Mount the whole repo, because the tests read `../worker/src/matrix/matrix.json`.)
 - `run.ts` `toolEnv(home)`: every tool gets HOME/TMPDIR/XDG_*/MAGICK_TEMPORARY_PATH/CALIBRE_* pointed at the job dir, plus QT_QPA_PLATFORM=offscreen and QTWEBENGINE sandbox off (Calibre PDF output). LibreOffice already uses a per-job `-env:UserInstallation`.
 - `server/index.ts` `newWorkDir()` creates WORK_ROOT on demand (a fresh HF container has an empty /tmp).
+- **H1 (async jobs, converter side):**
+  - `src/server/common.ts`: shared LIMITS, FORMAT_RE, `allowedUrl` (SSRF guard; also rejects user:pass@ URLs), `authorized` (constant-time Bearer), `readJson`, `download` (20 MB cap), `newWorkDir`, `timeoutFor` (H3 will make it per family).
+  - `src/server/jobs.ts`: `validateJob` (strict: jobId `[A-Za-z0-9_-]{8,64}`, chatId safe non-zero integer, positive statusMessageId/replyToMessageId, from/to/section regex, delivery.method ∈ SEND_METHODS, flat options ≤ 16 keys; `options.section` is forced to `section`), `processJob` (download → handler → 50 MB check → `TelegramClient.upload` → delete the status message; on error edit the status message with `errorText(kind)`, falling back to sendMessage if editing fails), `errorKind` (400 unsupported / 413 too_large / 504 or abort timeout / 422 invalid_input / else failed; a Telegram 413 = too_large), `createJobService`.
+  - `src/server/queue.ts`: `JobQueue` (concurrency `MAX_CONCURRENT_JOBS`=2, `MAX_QUEUE`=20 waiting → 429, jobIds remembered for 1 h for idempotency (a duplicate returns 202 `{duplicate:true}` and does nothing), jobs waiting longer than `JOB_MAX_AGE_MS`=10 min get `JOB_EXPIRED`). `onIdle()` for tests.
+  - `src/telegram.ts`: `TelegramClient` (`upload` uses `fs.openAsBlob` = disk-backed multipart, no full buffering; `editMessageText`, `deleteMessage`, `call`), `redact()` (strips `bot<token>` from any string), `TELEGRAM_API_BASE` env override (for tests / a local Bot API server).
+  - `src/shared/job-messages.ts` = **byte-identical copy** of `worker/src/shared/job-messages.ts` (the user-facing texts + `errorText(kind)`); `tests/jobs.test.ts` asserts they are equal.
+  - `POST /jobs` → 202 `{jobId, position}`; 401 bad token; 400 invalid payload; 422 unknown conversion; 429 queue full. `GET /health` (and `/`) → `{ok, queued, running}` only. Logs: `job_queued`, `job_ok`, `job_fail` (jobId, from, to, section, kind, bytes, ms; msg is redacted), `job_rejected`. File URLs are never logged.
+  - `tests/jobs.test.ts` (39 tests, ~2 s) uses a fake Telegram server (`http.createServer`, parses multipart with `Request.formData()`): every delivery method, the ZIP → .zip rule, every error kind (incl. a sparse 51 MB output), download failure, upload failure, duplicate jobId, 429, expiry, invalid payloads, token redaction in logs.
 - Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
 
 ## Next agent instructions

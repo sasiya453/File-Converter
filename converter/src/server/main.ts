@@ -5,6 +5,7 @@ if (!process.env.CONVERTER_TOKEN) {
   console.error("CONVERTER_TOKEN is required");
   process.exit(1);
 }
+if (!process.env.BOT_TOKEN) console.warn("BOT_TOKEN is not set: POST /jobs cannot deliver results (POST /convert still works)");
 // WORK_ROOT (default /tmp/work in the image) must exist and be writable by uid 1000.
 if (process.env.WORK_ROOT) mkdirSync(process.env.WORK_ROOT, { recursive: true });
 const port = Number(process.env.PORT ?? 7860);
