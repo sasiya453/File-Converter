@@ -1,7 +1,7 @@
 # Handoff
 ## Project status
 - Phase 1 (Tasks 0–24): DONE.
-- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H3**. Next: **H4**.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H4**. Next: **H5**.
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -108,7 +108,7 @@
 - [x] H1 - Async job API in the converter (POST /jobs, queue, idempotency, Telegram delivery, error mapping, expiry, redacted logs)
 - [x] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
 - [x] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
-- [ ] H4 - Slim the image (measure, remove unneeded tools, record sizes)
+- [x] H4 - Slim the image (measure, remove unneeded tools, record sizes) — 2.7 GB → 2.14 GB, 992/992 tests in the image
 - [ ] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
 - [ ] H6 - Docs, smoke-test script, final verification
 
@@ -143,6 +143,13 @@
   - `/health` → `{ok, queued, running, uptimeSec}` (nothing else).
   - Verified: image `file-converter:h3` built; the full suite inside it (uid 1000, read-only rootfs, /tmp tmpfs) → **992 tests, 0 failures**. In the dev sandbox `pdf -> rtf` fails only because pdf2docx isn't installed there (it was already like that before H3; `pip install pdf2docx` fixes it).
   - Tests: `tests/resources.test.ts` (timeouts, prlimit wrap, fsize cap, nice, process-group kill, sweep, disk check, 429 on low disk, /health keys). `jobs.test.ts`/`server.test.ts` set `MIN_FREE_DISK_MB=0` (the dev sandbox's /tmp is a 493 MB tmpfs).
+- **H4 (slim image), measured with `docker images` / `docker history`:**
+  - Before: **2.70 GB** total (apt layer 1.88 GB, pip venv layer 597 MB). After: **2.14 GB**.
+  - Removed: `inkscape` (~100 MB + deps; never invoked: SVG → rsvg-convert, EPS → Ghostscript, TGS → lottie+cairosvg), `default-jre-headless` (OpenJDK 17, ~190 MB; the LO filters we use don't need Java), `unrar` (7z + `p7zip-rar` reads RAR4/RAR5, which the CBR tests cover), `python3-pip` (apt), `pillow-heif` (unused; HEIC goes through IM/heif-convert), and **`lottie[gif]` → `lottie`**: the extra pulled the 151 MB `glaxnimate` wheel built for CPython 3.13, which bookworm's Python 3.11 can't import anyway (lottie already rendered via cairosvg).
+  - Also: dpkg `path-exclude` for doc/man/info/locale/help, apt caches cleaned in the same layer, LO gallery/templates/help removed, venv `pip` uninstalled after install, `__pycache__`/site-packages `tests` dirs removed, `--no-compile`.
+  - Kept (needed by registered conversions): ffmpeg, LO writer/calc/impress/draw, IM, gs, poppler, calibre, fontforge (+python3-fontforge, a hard dep), woff2, tesseract, librsvg2-bin, libheif-examples, libavif-bin, djvulibre, p7zip-full/rar, zip/unzip, the fonts.
+  - Verified: the full suite in `fc:slim` (uid 1000, `--read-only`, /tmp tmpfs) → **992 tests, 0 failures, 0 skipped**; /health OK on :7860.
+  - Biggest remaining items: libqt6webenginecore6 (150 MB, a Calibre dep needed for e-book → PDF), libreoffice-core, libllvm15 (mesa, pulled by Qt). Further cuts would need dropping functionality.
 - Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
 
 ## Next agent instructions

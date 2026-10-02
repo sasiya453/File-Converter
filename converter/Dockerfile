@@ -12,25 +12,37 @@ RUN npm run build
 
 FROM node:22-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
-# contrib/non-free is needed for p7zip-rar (RAR5 support in 7z for CBR input).
-RUN sed -i 's/Components: main/Components: main contrib non-free/' /etc/apt/sources.list.d/debian.sources \
+# contrib/non-free is needed for p7zip-rar (RAR4/RAR5 support in 7z for CBR input; no separate unrar).
+# Slimmed in Task H4: no inkscape (SVG/EPS go through rsvg-convert / Ghostscript), no JRE (the
+# Writer/Calc/Impress filters we use don't need Java), no python3-pip (the venv has its own pip).
+# Docs/man pages/locales are dropped via dpkg path-exclude and pruned in the same layer.
+RUN printf 'path-exclude /usr/share/doc/*\npath-include /usr/share/doc/*/copyright\npath-exclude /usr/share/man/*\npath-exclude /usr/share/info/*\npath-exclude /usr/share/locale/*\npath-include /usr/share/locale/locale.alias\npath-exclude /usr/share/help/*\npath-exclude /usr/share/gtk-doc/*\n' > /etc/dpkg/dpkg.cfg.d/01-slim \
+ && sed -i 's/Components: main/Components: main contrib non-free/' /etc/apt/sources.list.d/debian.sources \
  && apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
-      libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw default-jre-headless \
+      libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw \
       imagemagick ghostscript poppler-utils \
       calibre \
       fontforge python3-fontforge woff2 \
       tesseract-ocr tesseract-ocr-eng \
-      inkscape librsvg2-bin \
+      librsvg2-bin \
       libheif-examples libavif-bin \
-      djvulibre-bin unrar p7zip-full p7zip-rar zip unzip \
-      python3 python3-pip python3-venv \
+      djvulibre-bin p7zip-full p7zip-rar zip unzip \
+      python3 python3-venv \
       fonts-dejavu fonts-liberation fonts-noto-core \
       ca-certificates tini \
- && rm -rf /var/lib/apt/lists/*
-# Python tools: fontTools(+brotli for woff2), pysubs2 (subtitles), lottie (TGS rendering)
-RUN python3 -m venv /opt/py && /opt/py/bin/pip install --no-cache-dir \
-      "fonttools[woff]" brotli pysubs2 "lottie[gif]" cairosvg pillow pillow-heif pdf2docx img2pdf
+ && apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* /var/log/apt /var/log/dpkg.log \
+ && rm -rf /usr/share/doc/*/[!c]* /usr/share/man /usr/share/info /usr/share/help /usr/share/gtk-doc \
+ && find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name locale.alias -exec rm -rf {} + \
+ && rm -rf /usr/lib/libreoffice/share/gallery /usr/lib/libreoffice/share/template /usr/lib/libreoffice/help
+# Python tools: fontTools(+brotli for woff2), pysubs2 (subtitles), lottie + cairosvg (TGS rendering;
+# plain `lottie`, NOT `lottie[gif]`: that extra pulls a 150 MB glaxnimate wheel built for CPython 3.13,
+# which bookworm's 3.11 can't import anyway, so lottie always renders via cairosvg), pdf2docx, img2pdf.
+RUN python3 -m venv /opt/py && /opt/py/bin/pip install --no-cache-dir --no-compile \
+      "fonttools[woff]" brotli pysubs2 lottie cairosvg pillow pdf2docx img2pdf \
+ && /opt/py/bin/pip uninstall -y pip \
+ && find /opt/py -name '__pycache__' -prune -exec rm -rf {} + \
+ && find /opt/py -name 'tests' -path '*site-packages/*' -prune -exec rm -rf {} +
 ENV PATH="/opt/py/bin:${PATH}"
 # Relax ImageMagick policy for PDF/EPS (Ghostscript), keep resource limits.
 RUN for f in /etc/ImageMagick-6/policy.xml; do \
