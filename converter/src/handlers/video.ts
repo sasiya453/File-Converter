@@ -33,8 +33,18 @@ export const VIDEO_ARGS: Record<string, string[]> = {
 // Even dimensions are required by yuv420p encoders (x264, mpeg2).
 const EVEN = ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"];
 
+/** ffmpeg thread cap (FFMPEG_THREADS, default 2 = the free Space's vCPUs). */
+export const ffmpegThreads = () => String(Math.max(1, Math.min(16, Number(process.env.FFMPEG_THREADS ?? 2) || 2)));
+
+/**
+ * Run ffmpeg. The last element of `args` must be the output file: `-threads N` is put
+ * right before it (so it applies to the encoder), `-filter_threads N` is global.
+ */
 export async function ffmpeg(args: string[], ctx: JobContext): Promise<void> {
-  await run("ffmpeg", ["-y", "-nostdin", "-hide_banner", "-loglevel", "error", ...args], { cwd: ctx.workDir, signal: ctx.signal });
+  const t = ffmpegThreads();
+  const out = args.slice(-1);
+  await run("ffmpeg", ["-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-filter_threads", t,
+    ...args.slice(0, -1), "-threads", t, ...out], { cwd: ctx.workDir, signal: ctx.signal });
 }
 
 export async function videoToContainer(ctx: JobContext): Promise<JobOutput> {

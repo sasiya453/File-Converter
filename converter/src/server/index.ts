@@ -8,6 +8,7 @@ import { HttpError } from "../types.js";
 import { redact } from "../telegram.js";
 import { LIMITS, FORMAT_RE, allowedUrl, authorized, readJson, download, newWorkDir, timeoutFor } from "./common.js";
 import { createJobService, validateJob, type JobServiceOptions } from "./jobs.js";
+import { hasEnoughDisk } from "./resources.js";
 import "../handlers/index.js";
 
 export { LIMITS, newWorkDir };
@@ -33,6 +34,7 @@ async function handleConvert(req: IncomingMessage, res: ServerResponse): Promise
   const options = body.options && typeof body.options === "object" ? (body.options as Record<string, unknown>) : {};
 
   const signal = AbortSignal.timeout(timeoutFor(from, to, typeof options.section === "string" ? options.section : undefined));
+  if (!(await hasEnoughDisk())) throw new HttpError(507, "not enough free disk space, try again later");
   const workDir = await newWorkDir();
   const started = Date.now();
   try {
@@ -60,11 +62,17 @@ async function handleConvert(req: IncomingMessage, res: ServerResponse): Promise
 
 export function createApp(opts: JobServiceOptions = {}) {
   const jobs = createJobService(opts);
+  const startedAt = Date.now();
 
   async function handleJobs(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!authorized(req)) return sendError(res, 401, "unauthorized");
     const job = validateJob(await readJson(req));
     if (!lookup(job.from, job.to)) return sendError(res, 422, `unsupported conversion ${job.from}->${job.to}`);
+    if (!(await hasEnoughDisk())) {
+      // Same answer as a full queue: the Worker shows "busy, try again in a minute".
+      console.log(JSON.stringify({ evt: "job_rejected", jobId: job.jobId, from: job.from, to: job.to, reason: "low_disk" }));
+      return sendJson(res, 429, { error: "not enough free disk space", jobId: job.jobId });
+    }
     const r = jobs.queue.enqueue(job.jobId, job);
     if (r.status === "full") {
       console.log(JSON.stringify({ evt: "job_rejected", jobId: job.jobId, from: job.from, to: job.to, reason: "queue_full" }));
@@ -81,7 +89,10 @@ export function createApp(opts: JobServiceOptions = {}) {
     try {
       const path = (req.url ?? "/").split("?")[0];
       if ((req.method === "GET" || req.method === "HEAD") && (path === "/health" || path === "/")) {
-        return sendJson(res, 200, { ok: true, queued: jobs.queue.queued, running: jobs.queue.running });
+        return sendJson(res, 200, {
+          ok: true, queued: jobs.queue.queued, running: jobs.queue.running,
+          uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
+        });
       }
       if (req.method === "POST" && path === "/jobs") return await handleJobs(req, res);
       if (req.method === "POST" && path === "/convert") return await handleConvert(req, res);

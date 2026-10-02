@@ -8,6 +8,7 @@ import { TelegramClient, TelegramError, SEND_METHODS, TELEGRAM_UPLOAD_LIMIT, red
 import { errorText, JOB_EXPIRED, type JobErrorKind } from "../shared/job-messages.js";
 import { JobQueue } from "./queue.js";
 import { download, newWorkDir, LIMITS, FORMAT_RE, allowedUrl, timeoutFor } from "./common.js";
+import { hasEnoughDisk } from "./resources.js";
 
 export interface JobPayload {
   jobId: string;
@@ -109,6 +110,8 @@ export async function processJob(job: JobPayload, deps: JobRunnerDeps): Promise<
   try {
     const handler = lookup(job.from, job.to);
     if (!handler) throw new HttpError(400, `unsupported conversion ${job.from}->${job.to}`);
+    // Disk can fill up while the job waited in the queue.
+    if (!(await hasEnoughDisk())) throw new HttpError(507, "not enough free disk space");
     workDir = await newWorkDir();
     const input = join(workDir, `input.${job.from}`); // fixed name: never a user-supplied filename on disk
     await download(job.fileUrl, input, signal);

@@ -9,6 +9,7 @@ import { register } from "../src/registry.js";
 import { run } from "../src/run.js";
 
 process.env.CONVERTER_TOKEN = "test-token";
+process.env.MIN_FREE_DISK_MB = "0";
 let app: Server, files: Server, base = "", fileBase = "";
 
 before(async () => {

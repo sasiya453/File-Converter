@@ -1,7 +1,7 @@
 # Handoff
 ## Project status
 - Phase 1 (Tasks 0–24): DONE.
-- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H2**. Next: **H3**.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H3**. Next: **H4**.
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -12,7 +12,7 @@
 - Matrix: `cd worker && npx tsx ../scripts/check-matrix.ts`. Re-extract from PNG: `python3 scripts/extract-matrix.py` (needs Pillow, numpy, scipy).
 - Webhook: `BOT_TOKEN=.. WEBHOOK_SECRET=.. WORKER_URL=.. npx tsx scripts/set-webhook.ts` (run from `worker/` so tsx resolves). This also sets the /start and /menu commands and the commands menu button.
 - Worker secrets: BOT_TOKEN, WEBHOOK_SECRET, CONVERTER_URL, CONVERTER_TOKEN (`wrangler secret put`). KV binding: SESSIONS. Var: RATE_LIMIT_PER_MIN.
-- Converter env: CONVERTER_TOKEN (required), ALLOWED_URL_PREFIXES (default `https://api.telegram.org/file/`, SSRF guard), JOB_TIMEOUT_MS (120000), WORK_ROOT, PORT.
+- Converter env: CONVERTER_TOKEN (required), BOT_TOKEN (required for /jobs), ALLOWED_URL_PREFIXES (default `https://api.telegram.org/file/`, SSRF guard), PORT (7860), WORK_ROOT (/tmp/work), MAX_CONCURRENT_JOBS (2), MAX_QUEUE (20), JOB_MAX_AGE_MS (600000), JOB_TIMEOUT_MS (fallback 120000) + JOB_TIMEOUT_<FAMILY>_MS, MIN_FREE_DISK_MB (1024), FFMPEG_THREADS (2), TOOL_MAX_MEM_MB (4096), TOOL_MAX_FILE_MB (2048), TOOL_NICE (10), USE_PRLIMIT (1), TELEGRAM_API_BASE (tests).
 
 ## Architecture notes (what exists)
 - `worker/src/index.ts`: `/webhook/<secret>` + header `X-Telegram-Bot-Api-Secret-Token` check (constant-time), returns 200 at once, does the work in `ctx.waitUntil(processUpdate)`. `/health` returns ok.
@@ -107,7 +107,7 @@
 - [x] H0 - HF-compatible Docker image (uid 1000, PORT 7860, /tmp/work, per-job HOME/XDG, Space README, .dockerignore) — **built and tested with Docker**
 - [x] H1 - Async job API in the converter (POST /jobs, queue, idempotency, Telegram delivery, error mapping, expiry, redacted logs)
 - [x] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
-- [ ] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
+- [x] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
 - [ ] H4 - Slim the image (measure, remove unneeded tools, record sizes)
 - [ ] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
 - [ ] H6 - Docs, smoke-test script, final verification
@@ -134,6 +134,15 @@
   - `worker/src/messages.ts` re-exports the job texts from `shared/job-messages.ts` (single source). New shared text `CONVERTER_UNAVAILABLE` (both copies; byte-identity tested in both packages: `worker/test/errors.test.ts` and `converter/tests/jobs.test.ts`).
   - Cron keep-alive: `wrangler.toml` `[triggers] crons = ["*/20 * * * *"]` → `scheduled()` → `keepAlive(env)` = GET `{CONVERTER_URL}/health` (25 s timeout, never throws, logs `keepalive`).
   - Tests: `worker/test/async-client.test.ts`, `callback.test.ts` (rewritten), `errors.test.ts`, `webhook.test.ts` (+cron). 46 vitest tests pass; typecheck + `wrangler deploy --dry-run` OK.
+- **H3 (resource safety):**
+  - `converter/src/server/resources.ts`: `FAMILY_TIMEOUT_MS` (video 110 s, ebook 110 s, document/presentation/audio 90 s, sheet/image 60 s, font 30 s, subtitle 20 s); `timeoutFor(from,to,section)` = `JOB_TIMEOUT_<FAMILY>_MS` env → table → `JOB_TIMEOUT_MS` (fallback, default 120 s) → capped at `MAX_JOB_TIMEOUT_MS` = 5 min. `freeDiskBytes`/`hasEnoughDisk` (statfs on WORK_ROOT, `MIN_FREE_DISK_MB` default 1024). `sweepWorkRoot(olderThanMs)` removes `job-*` dirs.
+  - `main.ts`: startup sweep of WORK_ROOT (every `job-*` dir is stale after a restart) + a periodic sweep every 10 min of dirs older than 15 min (safety net; jobs also `rm -rf` their dir in `finally`).
+  - Low disk: `POST /jobs` → **429** (`reason: low_disk`, the Worker shows the busy text); a queued job that starts with low disk fails with 507 → "failed"; `POST /convert` → 507.
+  - `run.ts` `withLimits()`: every tool is exec'd through `prlimit --fsize=TOOL_MAX_FILE_MB(2048) --core=0 --nofile=1024 -- nice -n TOOL_NICE(10) <tool>`; `AS_LIMITED_TOOLS` (ffmpeg, ffprobe, gs, IM, tesseract, poppler, djvulibre, rsvg, heif/avif, 7z, img2pdf, zip…) also get `--as=TOOL_MAX_MEM_MB(4096)`. **LibreOffice, Calibre (QtWebEngine), Java and FontForge get no RLIMIT_AS** (they reserve huge virtual ranges and crash under it); they are single-instance per job (own profile) and the queue caps concurrency. prlimit/nice exec the tool, so the process-group kill on timeout still works (tested with a background grandchild). `USE_PRLIMIT=0` disables it. A missing tool behind prlimit (exit 127) is still a 500.
+  - `ffmpeg()` adds `-filter_threads N` and `-threads N` before the output (`FFMPEG_THREADS`, default 2). Tesseract already has `OMP_THREAD_LIMIT=2`; IM has `-limit` caps.
+  - `/health` → `{ok, queued, running, uptimeSec}` (nothing else).
+  - Verified: image `file-converter:h3` built; the full suite inside it (uid 1000, read-only rootfs, /tmp tmpfs) → **992 tests, 0 failures**. In the dev sandbox `pdf -> rtf` fails only because pdf2docx isn't installed there (it was already like that before H3; `pip install pdf2docx` fixes it).
+  - Tests: `tests/resources.test.ts` (timeouts, prlimit wrap, fsize cap, nice, process-group kill, sweep, disk check, 429 on low disk, /health keys). `jobs.test.ts`/`server.test.ts` set `MIN_FREE_DISK_MB=0` (the dev sandbox's /tmp is a 493 MB tmpfs).
 - Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
 
 ## Next agent instructions

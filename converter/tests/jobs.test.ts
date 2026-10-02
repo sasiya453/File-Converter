@@ -13,6 +13,7 @@ import { ERROR_TEXT, JOB_EXPIRED } from "../src/shared/job-messages.js";
 import { createApp } from "../src/server/index.js";
 
 process.env.CONVERTER_TOKEN = "jobs-token";
+process.env.MIN_FREE_DISK_MB = "0"; // the API tests must not depend on the host's free disk (tests/resources.test.ts covers the check)
 const BOT = "123456:SECRET_bot_token-xyz";
 
 interface TgCall { method: string; fields: Record<string, string>; file?: { field: string; name: string; size: number; type: string } }

@@ -2,25 +2,21 @@
 import type { IncomingMessage } from "node:http";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { timingSafeEqual } from "node:crypto";
 import { HttpError } from "../types.js";
+import { workRoot } from "./resources.js";
 
 export const LIMITS = {
   maxInput: 20 * 1024 * 1024,
   maxOutput: 50 * 1024 * 1024,
-  timeoutMs: Number(process.env.JOB_TIMEOUT_MS ?? 120_000),
   maxBody: 16 * 1024,
 };
 export const FORMAT_RE = /^[a-z0-9][a-z0-9.]{0,9}$/;
 
-/** Per-job timeout. (H3 refines this per family.) */
-export function timeoutFor(_from: string, _to: string, _section?: string): number {
-  return LIMITS.timeoutMs;
-}
+export { timeoutFor } from "./resources.js";
 
 /** SSRF guard: only URLs starting with one of ALLOWED_URL_PREFIXES may be downloaded. */
 export function allowedUrl(u: string): boolean {
@@ -68,7 +64,7 @@ export async function download(url: string, dest: string, signal: AbortSignal): 
 
 /** Per-job private dir under WORK_ROOT (created on demand: /tmp is empty on a fresh HF container). */
 export async function newWorkDir(): Promise<string> {
-  const root = process.env.WORK_ROOT ?? tmpdir();
+  const root = workRoot();
   await mkdir(root, { recursive: true });
   return mkdtemp(join(root, "job-"));
 }
