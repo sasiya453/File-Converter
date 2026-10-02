@@ -39,4 +39,6 @@ export const CONVERTING = "⏳ Converting…";
 export const CONVERSION_FAILED = "❌ Conversion failed. Please try another format or file.";
 export const CONVERSION_TIMEOUT = "⌛ Conversion timed out. Please try a smaller file.";
 export const RATE_LIMITED = "🐢 Too many conversions. Please wait a minute and try again.";
+export const INVALID_INPUT =
+  "❌ This file can't be converted to that format. It may be damaged, password-protected, or missing the needed content (for example no text, no audio track or no images).";
 export const RESULT_TOO_LARGE = "❌ The converted file is larger than 50 MB and can't be sent via Telegram.";

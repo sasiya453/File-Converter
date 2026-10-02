@@ -13,7 +13,7 @@ export interface ConvertResult {
 }
 
 export class ConverterError extends Error {
-  constructor(message: string, public kind: "failed" | "timeout" | "too_large" | "unsupported") {
+  constructor(message: string, public kind: "failed" | "timeout" | "too_large" | "unsupported" | "invalid_input") {
     super(message);
   }
 }

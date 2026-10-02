@@ -35,7 +35,7 @@ export class HttpConverterClient implements ConverterClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       const kind = res.status === 504 ? "timeout" : res.status === 413 ? "too_large"
-        : res.status === 400 || res.status === 422 ? "unsupported" : "failed";
+        : res.status === 400 ? "unsupported" : res.status === 422 ? "invalid_input" : "failed";
       throw new ConverterError(`converter ${res.status}: ${text.slice(0, 300)}`, kind);
     }
     const len = Number(res.headers.get("content-length") ?? "0");

@@ -7,7 +7,7 @@ import { isAllowed } from "../matrix";
 import { deliveryFor } from "../matrix/delivery";
 import { makeConverter, ConverterError, type ConverterClient } from "../converter";
 import {
-  CONVERSION_FAILED, CONVERSION_TIMEOUT, CONVERTING, RATE_LIMITED, RESULT_TOO_LARGE,
+  CONVERSION_FAILED, CONVERSION_TIMEOUT, CONVERTING, INVALID_INPUT, RATE_LIMITED, RESULT_TOO_LARGE,
   SESSION_EXPIRED, UNSUPPORTED_HTML,
 } from "../messages";
 
@@ -32,6 +32,7 @@ export function errorMessage(e: unknown): string {
     if (e.kind === "timeout") return CONVERSION_TIMEOUT;
     if (e.kind === "too_large") return RESULT_TOO_LARGE;
     if (e.kind === "unsupported") return UNSUPPORTED_HTML;
+    if (e.kind === "invalid_input") return INVALID_INPUT;
   }
   return CONVERSION_FAILED;
 }
@@ -72,9 +73,11 @@ export async function handleCallback(env: Env, tg: Telegram, cq: TgCallbackQuery
     await tg.upload(delivery.method, delivery.field, result.body, outputName(session.fileName, resultExt(delivery.ext, delivery.method, result)), {
       chat_id: chatId, ...(delivery.extra ?? {}),
     });
-    console.log(JSON.stringify({ evt: "convert_ok", from: session.source, to: choice.target, ms: Date.now() - started }));
+    console.log(JSON.stringify({ evt: "convert_ok", from: session.source, to: choice.target, section: choice.section,
+      bytes: result.body.size, ms: Date.now() - started }));
   } catch (e) {
-    console.error(JSON.stringify({ evt: "convert_fail", from: session.source, to: choice.target, err: String(e).slice(0, 500) }));
+    console.error(JSON.stringify({ evt: "convert_fail", from: session.source, to: choice.target, ms: Date.now() - started,
+      kind: e instanceof ConverterError ? e.kind : "internal", err: String(e).slice(0, 500) }));
     await tg.sendMessage(chatId, errorMessage(e)).catch(() => undefined);
   } finally {
     await tg.deleteMessage(chatId, status.message_id).catch(() => undefined);
