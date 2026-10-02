@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 15 - Special image sources (commit f98d383)
+- Last completed task: 16 - Audio → audio (commit b98e1f6)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -41,6 +41,7 @@
 - Task 13 (in `image.ts`): `imageToPdf` (1 page, frame 0 or the largest ICO frame, flattened on white, JPEG-compressed, `PDF:` coder), `imageToSendPhoto` (JPEG q85, ≤ 2560 px on the long side, `converted.jpg`), `imageToOcr` (grayscale PNG upscaled to ≥ 1000 px → `tesseract … -l eng` → `converted.txt`, 422 when empty; optional `options.lang` validated by regex). Registered for all 10 raster rows (OCR is ✗ for gif/ico). These handlers are generic, so Task 15 can register them for HEIC/AVIF/PSD/EPS/SVG/APNG if IM can read those (otherwise pre-convert to PNG first). OCR fixtures `tests/fixtures/ocr.{png,jpg,jpeg,jp2,webp,bmp,tif,tiff}` ("Hello Converter"). image.test.ts now has 122 tests.
 - Task 14 (in `image.ts`): `ffmpegReadable(ctx)` normalises the input for ffmpeg: GIF as is, animated WebP → coalesced GIF (ffmpeg can't decode animated WebP), anything else → PNG32 of frame 0. `imageToApng` (`-f apng -plays 0` → `converted.apng`, MIME image/apng; still images become a 2-frame identical APNG so the acTL chunk exists) is registered for the 9 raster rows except ICO. `imageToMp4` (H.264 yuv420p faststart, transparency on white, even size; still input → 3 s clip) is registered for gif only. **GIFZ: no raster row has ✓; only TGS (Task 15).** image.test.ts: 133 tests.
 - Task 15: `converter/src/handlers/image-special.ts`: `SPECIAL_ROWS` (a copy of the matrix rows; a test asserts it equals matrix.json). Each source is normalised and then sent through the generic image.ts handlers (`generic()`): HEIC/AVIF/PSD → IM with an explicit coder (`HEIC:in[0]`; fallbacks `heif-convert`, `avifdec`) → PNG32. EPS → Ghostscript (`-dSAFER -dEPSCrop pngalpha 150 dpi`; EPS→PDF uses gs pdfwrite = vector). SVG → `rsvg-convert` PNG (SVG→PDF uses rsvg-convert -f pdf = vector). APNG → ffmpeg `-f apng` (frame 0 for still targets; →GIF/WEBP/MP4 keep the animation via palettegen GIF). TGS → gunzip (16 MB cap, 422 if invalid) → `lottie_convert.py` GIF → **re-encoded with ffmpeg** (python-lottie GIFs have palette indices that ImageMagick rejects) → gif / webp (animated, IM) / apng / gifz. GIFZ zip = `animation.gif` + `frames/frame-000.png…`. Fixtures `sample.{heic,avif,psd,eps,svg,apng,tgs}` (the heic/avif/psd/eps/svg ones contain the text "Hello Converter" for OCR). `tests/image-special.test.ts`: 81 tests. **The IMAGE section is now complete (207).**
+- Task 16: `converter/src/handlers/audio.ts`: `AUDIO_SOURCES` (11 rows incl. amr), `AUDIO_TARGETS` (10), `AUDIO_ARGS` table (mp3 = MP3_ARGS, ogg/oga = libvorbis q5 `-f ogg`, opus = libopus 128k 48 kHz `-f opus`, wav = pcm_s16le, flac, wma = wmav2 `-f asf`, m4a = aac `-f ipod` faststart, aac = ADTS, aiff = pcm_s16be). `encodeAudio(ext, args)` is a generic handler (ffprobe check → 422 "the file has no audio stream"; `-map 0:a:0 -vn` drops cover art; metadata kept). Exported `hasAudioStream()`. Every non-diagonal audio→audio cell is ✓. MIME types added for opus/flac/wma/oga/m4a/aac/aiff/amr. Fixtures `sample.{mp3,ogg,opus,wav,flac,wma,oga,m4a,aac,aiff,amr}` (0.5 s 440 Hz mono). The AMR fixture was made with `sox -t amr-nb` because the sandbox ffmpeg has no AMR encoder, only the decoder (that is all the bot needs, since AMR is only a source). `tests/audio.test.ts`: 103 tests, ~50 s.
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -82,7 +83,7 @@
 - [x] Task 13 - Image → PDF, SENDPHOTO, OCR
 - [x] Task 14 - Image → MP4, GIFZ, APNG (only ✓)
 - [x] Task 15 - Special image sources: TGS, HEIC, AVIF, PSD, EPS, SVG, APNG
-- [ ] Task 16 - Audio → audio
+- [x] Task 16 - Audio → audio
 - [ ] Task 17 - Audio → AUDIONOTE
 - [ ] Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF
 - [ ] Task 19 - CBR, CBZ, DJVU rows
@@ -93,9 +94,9 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 16 - Audio → audio** (rows mp3, ogg, opus, wav, flac, wma, oga, m4a, aac, aiff, amr; targets mp3…aiff, NOT audionote = Task 17). Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.audio.rows;for(const k in r)console.log(k,r[k].join(","))'`. Plan: new `converter/src/handlers/audio.ts`, reuse `ffmpeg()` from video.ts and `converter/src/tools/audio-args.ts` (MP3_ARGS exists). Per-target args: ogg = libvorbis q5, opus = libopus 128k (`-f ogg`, or `-f opus`), oga = libvorbis in ogg (`-f ogg`), wav = pcm_s16le, flac, wma = wmav2 (`-f asf`), m4a = aac 192k (`-f ipod`), aac = ADTS aac (`-f adts`), aiff = pcm_s16be (`-f aiff`). Use `-vn -map 0:a:0` (drop cover art) and 422 if there's no audio stream. Fixtures: 0.5 s sine per source (AMR via `-c:a libopencore_amrnb -ar 8000 -ac 1` if available, else check `ffmpeg -encoders | grep amr`). Add MIME types (opus, flac, wma, oga, m4a, aac, aiff, amr) to mime.ts.
-- Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`. The document handlers are in `converter/src/handlers/document.ts`.
-- Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). Docker is unavailable.
-- Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/video.test.ts`. Worker: `cd worker && npx vitest run`.
+- Start at: **Task 17 - Audio → AUDIONOTE** (all 11 audio rows have `audionote` ✓). Plan: in `converter/src/handlers/audio.ts` add `register(AUDIO_SOURCES, "audionote", encodeAudio("ogg", VOICE_ARGS))` (VOICE_ARGS is in `converter/src/tools/audio-args.ts`; the Worker already maps audionote → sendVoice, ext ogg). Add tests to `tests/audio.test.ts` (ogg container, opus codec, 1 channel, 48 kHz) for every audio fixture. Telegram voice limit: consider a max duration (optional).
+- Then Task 18 (eBooks): reuse `toEbook`/`EBOOK_TARGETS` and `toLibreOffice` from `converter/src/handlers/document.ts` and `ebookConvert` from `converter/src/tools/calibre.ts`. Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.ebook.rows;for(const k in r)console.log(k,r[k].join(","))'`.
+- Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`.
+- Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document/ebook tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). sox (`sudo apt-get install -y sox libsox-fmt-all`) is only needed to regenerate the AMR fixture. Docker is unavailable.
+- Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/audio.test.ts`. Worker: `cd worker && npx vitest run`.
 - Gotcha: `git push` needs `setup_github_environment` first in a new chat.
-- Gotcha: tsx one-off scripts with top-level await must be `.mts`.
