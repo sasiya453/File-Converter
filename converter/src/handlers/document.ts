@@ -82,3 +82,7 @@ export async function toLibreOffice(ctx: JobContext): Promise<JobOutput> {
 
 // Task 4: DOC row (matrix: PDF, DOCX, TXT, RTF, ODT; all other targets are ✗).
 register("doc", ["pdf", "docx", "txt", "rtf", "odt"], toLibreOffice);
+
+// Task 5: DOCX row (matrix: PDF, DOC, TXT, RTF, ODT + all e-book targets; PNG/JPG are ✗).
+register("docx", ["pdf", "doc", "txt", "rtf", "odt"], toLibreOffice);
+register("docx", EBOOK_TARGETS, toEbook);

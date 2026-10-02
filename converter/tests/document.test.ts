@@ -89,13 +89,30 @@ const DOC_CHECKS: Record<string, (p: string) => Promise<string>> = {
   rtf: (p) => readFile(p, "utf8"),
   odt: async (p) => odtText(p),
 };
-for (const [to, text] of Object.entries(DOC_CHECKS)) {
-  test(`doc -> ${to}`, { skip: !hasTool("soffice") && "soffice not installed" }, async () => {
-    const { out, cleanup } = await convertFixture("sample.doc", to);
+const WRITER_ROWS: Record<string, string[]> = {
+  "sample.doc": ["pdf", "docx", "txt", "rtf", "odt"],
+  "sample.docx": ["pdf", "doc", "txt", "rtf", "odt"],
+};
+DOC_CHECKS.doc = async (p) => spawnSync("soffice", ["--headless", "--cat", p]).stdout.toString();
+for (const [fixture, targets] of Object.entries(WRITER_ROWS)) for (const to of targets) {
+  const text = DOC_CHECKS[to]!;
+  test(`${fixture.split(".")[1]} -> ${to}`, { skip: !hasTool("soffice") && "soffice not installed" }, async () => {
+    const { out, cleanup } = await convertFixture(fixture, to);
     try {
       assert.equal(out.filename, `converted.${to}`);
       assert.ok((await stat(out.path)).size > 0);
       assert.match(await text(out.path), /Hello Converter/);
+    } finally { await cleanup(); }
+  });
+}
+
+// Task 5: DOCX -> e-book targets (Calibre).
+for (const [to, check] of Object.entries(EBOOK_CHECKS)) {
+  test(`docx -> ${to}`, { skip: !canCalibre && "calibre not installed" }, async () => {
+    const { out, cleanup } = await convertFixture("sample.docx", to);
+    try {
+      assert.ok(check(await readFile(out.path)), `bad ${to} output`);
+      assert.equal(out.filename, to === "oeb" ? "converted.oeb.zip" : `converted.${to}`);
     } finally { await cleanup(); }
   });
 }
