@@ -50,3 +50,36 @@ const SKIP: Record<string, string> = { "3gpp": "3gp", mpeg: "mpg", vob: "mkv" };
 for (const src of VIDEO_SOURCES) {
   register(src, VIDEO_CONTAINER_TARGETS.filter((t) => t !== src && SKIP[src] !== t), videoToContainer);
 }
+
+// ---- Task 10: GIF, VIDEONOTE, STREAM ----
+export const GIF_MAX_SECONDS = "15";
+export const VIDEONOTE_MAX_SECONDS = "60";
+
+/** Animated GIF: 10 fps, max 480 px wide, optimal palette, first 15 s. */
+export async function videoToGif(ctx: JobContext): Promise<JobOutput> {
+  const out = join(ctx.workDir, "converted.gif");
+  const vf = "fps=10,scale='min(480,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4";
+  await ffmpeg(["-t", GIF_MAX_SECONDS, "-i", ctx.input, "-map", "0:v:0", "-an", "-vf", vf, "-loop", "0", "-f", "gif", out], ctx);
+  return { path: out, contentType: mimeFor("gif"), filename: "converted.gif" };
+}
+
+/** Telegram video note: square 640x640 H.264/AAC MP4, max 60 s. */
+export async function videoToVideoNote(ctx: JobContext): Promise<JobOutput> {
+  const out = join(ctx.workDir, "converted.mp4");
+  const vf = "crop='min(iw,ih)':'min(iw,ih)',scale=640:640,setsar=1";
+  await ffmpeg(["-i", ctx.input, "-t", VIDEONOTE_MAX_SECONDS, "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn", "-vf", vf,
+    ...VIDEO_ARGS.mp4!, out], ctx);
+  return { path: out, contentType: mimeFor("mp4"), filename: "converted.mp4" };
+}
+
+/** Streamable MP4 (moov atom first), max 1280 px wide. */
+export async function videoToStream(ctx: JobContext): Promise<JobOutput> {
+  const out = join(ctx.workDir, "converted.mp4");
+  const vf = "scale='min(1280,iw)':-2,scale=trunc(iw/2)*2:trunc(ih/2)*2";
+  await ffmpeg(["-i", ctx.input, "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn", "-vf", vf, ...VIDEO_ARGS.mp4!, out], ctx);
+  return { path: out, contentType: mimeFor("mp4"), filename: "converted.mp4" };
+}
+
+register(VIDEO_SOURCES, "gif", videoToGif);
+register(VIDEO_SOURCES, "videonote", videoToVideoNote);
+register(VIDEO_SOURCES, "stream", videoToStream);

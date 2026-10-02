@@ -35,3 +35,41 @@ for (const src of VIDEO_SOURCES) for (const to of rows[src]!.filter((t) => VIDEO
     } finally { await cleanup(); }
   });
 }
+
+// ---- Task 10: GIF, VIDEONOTE, STREAM ----
+const SPECIAL = ["gif", "videonote", "stream"];
+
+test("gif/videonote/stream registry matches the matrix", () => {
+  for (const src of VIDEO_SOURCES) for (const to of SPECIAL) {
+    assert.equal(!!lookup(src, to), rows[src]!.includes(to), `${src}->${to}`);
+  }
+});
+
+/** True when the MP4 'moov' box comes before 'mdat' (faststart). */
+function moovFirst(path: string): boolean {
+  const b = readFileSync(path);
+  return b.indexOf("moov") !== -1 && b.indexOf("moov") < b.indexOf("mdat");
+}
+
+for (const src of VIDEO_SOURCES) for (const to of SPECIAL) {
+  test(`${src} -> ${to}`, { skip: !hasTool("ffmpeg") && "ffmpeg not installed" }, async () => {
+    const { out, cleanup } = await convertFixture(`sample.${src}`, to);
+    try {
+      const info = probe(out.path);
+      const v = info.streams.find((s: { codec_type: string }) => s.codec_type === "video");
+      if (to === "gif") {
+        assert.equal(info.format.format_name, "gif");
+        assert.equal(out.filename, "converted.gif");
+      } else {
+        assert.match(info.format.format_name, /mp4/);
+        assert.equal(v.codec_name, "h264");
+        assert.equal(out.filename, "converted.mp4");
+        assert.ok(moovFirst(out.path), "faststart");
+        if (to === "videonote") {
+          assert.equal(v.width, 640); assert.equal(v.height, 640);
+          assert.ok(Number(info.format.duration) <= 60.5);
+        }
+      }
+    } finally { await cleanup(); }
+  });
+}
