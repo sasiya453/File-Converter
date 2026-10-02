@@ -3,4 +3,5 @@ import "./document.js";
 import "./pdf-image.js";
 import "./video.js";
 import "./image.js";
+import "./image-special.js";
 export {};
