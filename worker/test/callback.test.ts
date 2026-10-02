@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { handleCallback, outputName } from "../src/flow/callback";
+import { handleCallback, outputName, resultExt } from "../src/flow/callback";
 import { Telegram } from "../src/telegram";
 import { ConverterError, type ConverterClient } from "../src/converter";
 import type { Env } from "../src/env";
@@ -62,5 +62,11 @@ describe("callback pipeline", () => {
     expect(outputName("a.b.pdf", "docx")).toBe("a.b.docx");
     expect(outputName("subs.qt.txt", "srt")).toBe("subs.srt");
     expect(outputName("", "txt")).toBe("file.txt");
+  });
+  it("resultExt switches to zip for multi-page image results", () => {
+    expect(resultExt("png", "sendDocument", { contentType: "application/zip", filename: "converted.zip" })).toBe("zip");
+    expect(resultExt("png", "sendDocument", { contentType: "image/png" })).toBe("png");
+    expect(resultExt("oeb.zip", "sendDocument", { contentType: "application/zip" })).toBe("oeb.zip");
+    expect(resultExt("jpg", "sendPhoto", { contentType: "application/zip" })).toBe("jpg");
   });
 });

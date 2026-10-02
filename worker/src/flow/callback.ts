@@ -17,6 +17,16 @@ export function outputName(original: string, ext: string): string {
   return `${base}.${ext}`;
 }
 
+/**
+ * Final extension: normally the delivery's ext, but if the converter returned a
+ * ZIP for a document target (e.g. a multi-page PDF -> PNG gives all pages zipped), use .zip.
+ */
+export function resultExt(deliveryExt: string, method: string, result: { contentType: string; filename?: string }): string {
+  if (method !== "sendDocument" || deliveryExt.endsWith("zip")) return deliveryExt;
+  const zipped = /application\/zip/i.test(result.contentType) || /\.zip$/i.test(result.filename ?? "");
+  return zipped ? "zip" : deliveryExt;
+}
+
 export function errorMessage(e: unknown): string {
   if (e instanceof ConverterError) {
     if (e.kind === "timeout") return CONVERSION_TIMEOUT;
@@ -59,7 +69,7 @@ export async function handleCallback(env: Env, tg: Telegram, cq: TgCallbackQuery
     const result = await converter.convert({
       fileUrl: url, from: session.source, to: choice.target, options: { section: choice.section },
     });
-    await tg.upload(delivery.method, delivery.field, result.body, outputName(session.fileName, delivery.ext), {
+    await tg.upload(delivery.method, delivery.field, result.body, outputName(session.fileName, resultExt(delivery.ext, delivery.method, result)), {
       chat_id: chatId, ...(delivery.extra ?? {}),
     });
     console.log(JSON.stringify({ evt: "convert_ok", from: session.source, to: choice.target, ms: Date.now() - started }));

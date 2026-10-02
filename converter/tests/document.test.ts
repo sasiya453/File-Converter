@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { stat, readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { convertFixture, hasTool, textOf } from "./helpers.js";
 
 const canPdfDocx = hasTool("pdf2docx") || hasTool("soffice");
@@ -53,6 +54,27 @@ for (const [to, check] of Object.entries(EBOOK_CHECKS)) {
     try {
       assert.ok(check(await readFile(out.path)), `bad ${to} output`);
       assert.equal(out.filename, to === "oeb" ? "converted.oeb.zip" : `converted.${to}`);
+    } finally { await cleanup(); }
+  });
+}
+
+for (const to of ["png", "jpg"]) {
+  test(`pdf -> ${to} (1 page: single image)`, { skip: !hasTool("pdftoppm") && "pdftoppm not installed" }, async () => {
+    const { out, cleanup } = await convertFixture("sample.pdf", to);
+    try {
+      const b = await readFile(out.path);
+      if (to === "png") assert.equal(b.subarray(1, 4).toString(), "PNG");
+      else assert.deepEqual([...b.subarray(0, 3)], [0xff, 0xd8, 0xff]);
+      assert.equal(out.filename, `converted.${to}`);
+    } finally { await cleanup(); }
+  });
+  test(`pdf -> ${to} (2 pages: zip)`, { skip: !hasTool("pdftoppm") && "pdftoppm not installed" }, async () => {
+    const { out, cleanup } = await convertFixture("sample-2p.pdf", to);
+    try {
+      assert.equal(out.contentType, "application/zip");
+      assert.equal(out.filename, "converted.zip");
+      const list = spawnSync("unzip", ["-Z1", out.path]).stdout.toString().trim().split("\n").sort();
+      assert.deepEqual(list, [`page-1.${to}`, `page-2.${to}`]);
     } finally { await cleanup(); }
   });
 }
