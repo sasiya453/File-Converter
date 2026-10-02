@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 14 - Image → MP4, GIFZ, APNG (commit 1277387)
+- Last completed task: 15 - Special image sources (commit f98d383)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -40,6 +40,7 @@
 - Task 12: `converter/src/tools/imagemagick.ts`: `magick(args, cwd, signal)` uses IM7 `magick` when present, else IM6 `convert` (the Docker image is bookworm = IM6), with `-limit` resource caps. `identify()` works the same way. `converter/src/handlers/image.ts`: `RASTER_SOURCES`/`RASTER_TARGETS` (png,jpg,jpeg,jp2,webp,bmp,tif,tiff,gif,ico) → `rasterToRaster`. It always writes with an explicit coder prefix (`JPEG:out`), uses frame `[0]` for still targets (the LARGEST frame for ICO sources), flattens JPG on white, uses LZW for TIFF, and downscales ICO to ≤256 px (`256x256>`). GIF↔WEBP keeps the animation (`-coalesce`), falling back to the first frame if that fails. Fixtures `sample.{png,jpg,jpeg,jp2,webp,bmp,tif,tiff,gif,ico}` (32x24; gif/webp have 3 frames, ico is 32+16). `tests/image.test.ts`: registry == matrix for raster targets + format/size/frame checks (91 tests, ~5 s). Reuse `magick()` and `RASTER_SOURCES` in Tasks 13–15.
 - Task 13 (in `image.ts`): `imageToPdf` (1 page, frame 0 or the largest ICO frame, flattened on white, JPEG-compressed, `PDF:` coder), `imageToSendPhoto` (JPEG q85, ≤ 2560 px on the long side, `converted.jpg`), `imageToOcr` (grayscale PNG upscaled to ≥ 1000 px → `tesseract … -l eng` → `converted.txt`, 422 when empty; optional `options.lang` validated by regex). Registered for all 10 raster rows (OCR is ✗ for gif/ico). These handlers are generic, so Task 15 can register them for HEIC/AVIF/PSD/EPS/SVG/APNG if IM can read those (otherwise pre-convert to PNG first). OCR fixtures `tests/fixtures/ocr.{png,jpg,jpeg,jp2,webp,bmp,tif,tiff}` ("Hello Converter"). image.test.ts now has 122 tests.
 - Task 14 (in `image.ts`): `ffmpegReadable(ctx)` normalises the input for ffmpeg: GIF as is, animated WebP → coalesced GIF (ffmpeg can't decode animated WebP), anything else → PNG32 of frame 0. `imageToApng` (`-f apng -plays 0` → `converted.apng`, MIME image/apng; still images become a 2-frame identical APNG so the acTL chunk exists) is registered for the 9 raster rows except ICO. `imageToMp4` (H.264 yuv420p faststart, transparency on white, even size; still input → 3 s clip) is registered for gif only. **GIFZ: no raster row has ✓; only TGS (Task 15).** image.test.ts: 133 tests.
+- Task 15: `converter/src/handlers/image-special.ts`: `SPECIAL_ROWS` (a copy of the matrix rows; a test asserts it equals matrix.json). Each source is normalised and then sent through the generic image.ts handlers (`generic()`): HEIC/AVIF/PSD → IM with an explicit coder (`HEIC:in[0]`; fallbacks `heif-convert`, `avifdec`) → PNG32. EPS → Ghostscript (`-dSAFER -dEPSCrop pngalpha 150 dpi`; EPS→PDF uses gs pdfwrite = vector). SVG → `rsvg-convert` PNG (SVG→PDF uses rsvg-convert -f pdf = vector). APNG → ffmpeg `-f apng` (frame 0 for still targets; →GIF/WEBP/MP4 keep the animation via palettegen GIF). TGS → gunzip (16 MB cap, 422 if invalid) → `lottie_convert.py` GIF → **re-encoded with ffmpeg** (python-lottie GIFs have palette indices that ImageMagick rejects) → gif / webp (animated, IM) / apng / gifz. GIFZ zip = `animation.gif` + `frames/frame-000.png…`. Fixtures `sample.{heic,avif,psd,eps,svg,apng,tgs}` (the heic/avif/psd/eps/svg ones contain the text "Hello Converter" for OCR). `tests/image-special.test.ts`: 81 tests. **The IMAGE section is now complete (207).**
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -49,7 +50,7 @@
 - OEB output is a directory: the converter zips it (`converted.oeb.zip`) and `delivery.ts` maps `oeb` → ext `oeb.zip` (so the user gets `<name>.oeb.zip`).
 - PDF → RTF goes through pdf2docx then LO (LO's direct PDF import is Draw-based and gives text boxes, not flowing text).
 - Video → GIF is limited to the first 15 s (to keep it under 50 MB). Video notes are cut at 60 s (Telegram limit).
-- GIFZ = animated GIF frames packaged as a ZIP (assumption, as the brief says). In the matrix only TGS → GIFZ is ✓.
+- GIFZ = animated GIF frames packaged as a ZIP (assumption, as the brief says). Implementation: the ZIP contains `animation.gif` plus each frame as `frames/frame-NNN.png`. In the matrix only TGS → GIFZ is ✓.
 - TGS row (from the image): WEBP, GIF, GIFZ, APNG only (no MP4).
 - QT.TXT is detected by the double extension `.qt.txt`.
 - TEXT source = a file with the `.text` extension (plain text). Telegram text messages are NOT converted; they get the menu/"send a file" reply.
@@ -60,6 +61,7 @@
 
 ## Known issues / BLOCKED items
 - **Matrix count mismatch:** the extracted matrix has 886 ✓ cells + TORRENT→TXT = **887**, but the bot advertises 874 (diff +13). Unique source formats = 89, which matches. Per section: document 84, video 197, image 207, audio 111, ebook 79, presentation 54, font 36, sheet 9, subtitle 110. The image is the source of truth, so all 887 are offered. We did not guess which 13 to drop.
+- Docker image: bookworm's IM6 may not read HEIC/AVIF; fallbacks `heif-convert` (libheif-examples) and `avifdec` (libavif-bin) are in the Dockerfile but untested there. Also check that `lottie_convert.py` is on PATH from /opt/py/bin.
 - Docker is not available in the dev sandbox, so the `converter/Dockerfile` has NOT been built yet. The first agent with Docker should run `docker build` and fix package names if any fail (e.g. `unrar` needs non-free, and the Dockerfile enables contrib/non-free).
 - The Worker uses `AbortSignal.any` (needs compatibility_date ≥ 2024; it is set to 2024-11-01).
 
@@ -79,7 +81,7 @@
 - [x] Task 12 - Image raster → raster
 - [x] Task 13 - Image → PDF, SENDPHOTO, OCR
 - [x] Task 14 - Image → MP4, GIFZ, APNG (only ✓)
-- [ ] Task 15 - Special image sources: TGS, HEIC, AVIF, PSD, EPS, SVG, APNG
+- [x] Task 15 - Special image sources: TGS, HEIC, AVIF, PSD, EPS, SVG, APNG
 - [ ] Task 16 - Audio → audio
 - [ ] Task 17 - Audio → AUDIONOTE
 - [ ] Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF
@@ -91,7 +93,7 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 15 - Special image sources** (TGS, HEIC, AVIF, PSD, EPS, SVG, APNG rows; many ✗, so always filter by `rows[src]`). Approach: write a `toPng(ctx)` pre-step per source that produces a frame-0 PNG (or frames for animated sources) and then reuse the existing handlers (`rasterToRaster`, `imageToPdf`, `imageToSendPhoto`, `imageToOcr`, `imageToApng`, `imageToMp4`) by calling them with a modified ctx `{...ctx, input: png, from: "png"}`. Tools: HEIC → `heif-convert` (libheif-examples) or IM (the sandbox IM7 reads HEIC/AVIF); AVIF → `avifdec` or IM; PSD → IM `in[0]` (the flattened composite); EPS → Ghostscript (`gs -dSAFER -dEPSCrop -sDEVICE=pngalpha -r150`), never IM directly (IM6 policy); SVG → `rsvg-convert` (librsvg2-bin) for raster and `rsvg-convert -f pdf` for PDF; APNG → ffmpeg `-f apng_demuxer`, or rename to .png and use `ffmpeg -i` (APNG→MP4/GIF keep the animation); TGS → gunzip → Lottie JSON → `lottie_convert.py` (python lottie package, in the Docker venv) to gif/webp/apng; GIFZ = render the GIF, explode its frames to PNG/GIF files, and zip them (`zipDir` from tools/calibre.ts). Check that each tool exists in the sandbox (`which rsvg-convert gs heif-convert avifdec lottie_convert.py`) and pip/apt install it if needed; mark BLOCKED if it's impossible. Fixtures: generate them with IM/ffmpeg (HEIC/AVIF via `heif-enc`/`avifenc` or IM), plus a tiny hand-made TGS (gzip of minimal Lottie JSON).
+- Start at: **Task 16 - Audio → audio** (rows mp3, ogg, opus, wav, flac, wma, oga, m4a, aac, aiff, amr; targets mp3…aiff, NOT audionote = Task 17). Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.audio.rows;for(const k in r)console.log(k,r[k].join(","))'`. Plan: new `converter/src/handlers/audio.ts`, reuse `ffmpeg()` from video.ts and `converter/src/tools/audio-args.ts` (MP3_ARGS exists). Per-target args: ogg = libvorbis q5, opus = libopus 128k (`-f ogg`, or `-f opus`), oga = libvorbis in ogg (`-f ogg`), wav = pcm_s16le, flac, wma = wmav2 (`-f asf`), m4a = aac 192k (`-f ipod`), aac = ADTS aac (`-f adts`), aiff = pcm_s16be (`-f aiff`). Use `-vn -map 0:a:0` (drop cover art) and 422 if there's no audio stream. Fixtures: 0.5 s sine per source (AMR via `-c:a libopencore_amrnb -ar 8000 -ac 1` if available, else check `ffmpeg -encoders | grep amr`). Add MIME types (opus, flac, wma, oga, m4a, aac, aiff, amr) to mime.ts.
 - Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`. The document handlers are in `converter/src/handlers/document.ts`.
 - Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). Docker is unavailable.
 - Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/video.test.ts`. Worker: `cd worker && npx vitest run`.
