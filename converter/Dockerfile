@@ -27,7 +27,7 @@ RUN sed -i 's/Components: main/Components: main contrib non-free/' /etc/apt/sour
  && rm -rf /var/lib/apt/lists/*
 # Python tools: fontTools(+brotli for woff2), pysubs2 (subtitles), lottie (TGS rendering)
 RUN python3 -m venv /opt/py && /opt/py/bin/pip install --no-cache-dir \
-      "fonttools[woff]" brotli pysubs2 "lottie[gif]" cairosvg pillow pillow-heif
+      "fonttools[woff]" brotli pysubs2 "lottie[gif]" cairosvg pillow pillow-heif pdf2docx
 ENV PATH="/opt/py/bin:${PATH}"
 # Relax ImageMagick policy for PDF/EPS (Ghostscript), keep resource limits.
 RUN for f in /etc/ImageMagick-6/policy.xml; do \
