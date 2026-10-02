@@ -1,6 +1,6 @@
 // Document family handlers (PDF, DOC, DOCX, TXT, RTF, ODT ...).
 import { join } from "node:path";
-import { stat } from "node:fs/promises";
+import { stat, copyFile } from "node:fs/promises";
 import { register } from "../registry.js";
 import { run } from "../run.js";
 import { mimeFor } from "../mime.js";
@@ -86,3 +86,32 @@ register("doc", ["pdf", "docx", "txt", "rtf", "odt"], toLibreOffice);
 // Task 5: DOCX row (matrix: PDF, DOC, TXT, RTF, ODT + all e-book targets; PNG/JPG are ✗).
 register("docx", ["pdf", "doc", "txt", "rtf", "odt"], toLibreOffice);
 register("docx", EBOOK_TARGETS, toEbook);
+
+/**
+ * Task 6: TXT and TEXT rows (matrix: PDF, DOC, DOCX, RTF, ODT + all e-book targets).
+ * `.text` is plain text with another extension; LibreOffice and Calibre pick their
+ * import filter from the extension, so the input is copied to `.txt` first.
+ * LO gets an explicit UTF-8 text import filter (argv, not a shell, so no quotes).
+ */
+async function asTxt(ctx: JobContext): Promise<JobContext> {
+  if (ctx.from !== "text") return ctx;
+  const input = join(ctx.workDir, "input-text.txt");
+  await copyFile(ctx.input, input);
+  return { ...ctx, input };
+}
+
+export async function textToLibreOffice(ctx: JobContext): Promise<JobOutput> {
+  const c = await asTxt(ctx);
+  const filter = LO_WRITER_FILTERS[c.to];
+  if (!filter) throw new HttpError(400, `no LibreOffice filter for ${c.to}`);
+  const p = await soffice(c.input, c.workDir, filter, c.signal, ["--infilter=Text (encoded):UTF8"]);
+  if (!(await nonEmpty(p))) throw new HttpError(422, "LibreOffice produced an empty file");
+  return out(p, c.to);
+}
+
+export async function textToEbook(ctx: JobContext): Promise<JobOutput> {
+  return toEbook(await asTxt(ctx));
+}
+
+register(["txt", "text"], ["pdf", "doc", "docx", "rtf", "odt"], textToLibreOffice);
+register(["txt", "text"], EBOOK_TARGETS, textToEbook);

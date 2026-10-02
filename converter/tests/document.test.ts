@@ -92,6 +92,8 @@ const DOC_CHECKS: Record<string, (p: string) => Promise<string>> = {
 const WRITER_ROWS: Record<string, string[]> = {
   "sample.doc": ["pdf", "docx", "txt", "rtf", "odt"],
   "sample.docx": ["pdf", "doc", "txt", "rtf", "odt"],
+  "sample.txt": ["pdf", "doc", "docx", "rtf", "odt"],
+  "sample.text": ["pdf", "doc", "docx", "rtf", "odt"],
 };
 DOC_CHECKS.doc = async (p) => spawnSync("soffice", ["--headless", "--cat", p]).stdout.toString();
 for (const [fixture, targets] of Object.entries(WRITER_ROWS)) for (const to of targets) {
@@ -106,13 +108,19 @@ for (const [fixture, targets] of Object.entries(WRITER_ROWS)) for (const to of t
   });
 }
 
-// Task 5: DOCX -> e-book targets (Calibre).
-for (const [to, check] of Object.entries(EBOOK_CHECKS)) {
-  test(`docx -> ${to}`, { skip: !canCalibre && "calibre not installed" }, async () => {
-    const { out, cleanup } = await convertFixture("sample.docx", to);
+// Task 5/6: DOCX, TXT, TEXT -> e-book targets (Calibre).
+for (const src of ["docx", "txt", "text"]) for (const [to, check] of Object.entries(EBOOK_CHECKS)) {
+  test(`${src} -> ${to}`, { skip: !canCalibre && "calibre not installed" }, async () => {
+    const { out, cleanup } = await convertFixture(`sample.${src}`, to);
     try {
       assert.ok(check(await readFile(out.path)), `bad ${to} output`);
       assert.equal(out.filename, to === "oeb" ? "converted.oeb.zip" : `converted.${to}`);
     } finally { await cleanup(); }
   });
 }
+
+// Task 6: UTF-8 survives the TXT import (explicit infilter).
+test("txt -> docx keeps UTF-8", { skip: !hasTool("soffice") && "soffice not installed" }, async () => {
+  const { out, cleanup } = await convertFixture("sample.txt", "docx");
+  try { assert.match(textOf(out.path), /üñíçødé/); } finally { await cleanup(); }
+});
