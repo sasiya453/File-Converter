@@ -5,7 +5,7 @@ import { register } from "../registry.js";
 import { run } from "../run.js";
 import { mimeFor } from "../mime.js";
 import { HttpError, type JobContext, type JobOutput } from "../types.js";
-import { MP3_ARGS } from "../tools/audio-args.js";
+import { MP3_ARGS, VOICE_ARGS } from "../tools/audio-args.js";
 import { ffmpeg } from "./video.js";
 
 export const AUDIO_SOURCES = ["mp3", "ogg", "opus", "wav", "flac", "wma", "oga", "m4a", "aac", "aiff", "amr"];
@@ -44,3 +44,6 @@ export function encodeAudio(ext: string, args: string[]) {
 for (const src of AUDIO_SOURCES) {
   for (const to of AUDIO_TARGETS) if (to !== src) register(src, to, encodeAudio(to, AUDIO_ARGS[to]!));
 }
+
+// ---- Task 17: AUDIO NOTE (Telegram voice message: OGG/Opus mono) ----
+register(AUDIO_SOURCES, "audionote", encodeAudio("ogg", VOICE_ARGS));

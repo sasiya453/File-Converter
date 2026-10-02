@@ -43,6 +43,22 @@ for (const src of AUDIO_SOURCES) for (const to of rows[src]!.filter((t) => AUDIO
   });
 }
 
+for (const src of AUDIO_SOURCES) {
+  test(`${src} -> audionote`, { skip: !hasTool("ffmpeg") && "ffmpeg not installed" }, async () => {
+    assert.ok(rows[src]!.includes("audionote"), "matrix has audionote");
+    const { out, cleanup } = await convertFixture(`sample.${src}`, "audionote");
+    try {
+      const info = probe(out.path);
+      assert.match(info.format.format_name, /ogg/);
+      assert.equal(info.streams.length, 1);
+      assert.equal(info.streams[0].codec_name, "opus");
+      assert.equal(info.streams[0].channels, 1);
+      assert.equal(out.filename, "converted.ogg");
+      assert.match(out.contentType, /^audio\/ogg/);
+    } finally { await cleanup(); }
+  });
+}
+
 test("video-only input is rejected with 422", { skip: !hasTool("ffmpeg") && "ffmpeg not installed" }, async () => {
   // noaudio.mp4 renamed as m4a: an audio container without an audio stream.
   const { copyFile, mkdtemp, rm } = await import("node:fs/promises");
