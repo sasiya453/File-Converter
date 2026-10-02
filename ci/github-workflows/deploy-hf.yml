@@ -1,0 +1,88 @@
+# Push the contents of converter/ to the Hugging Face Docker Space repo.
+# Required GitHub secrets:
+#   HF_TOKEN  - a Hugging Face access token with "write" permission
+#   HF_SPACE  - the Space id, e.g. "username/file-converter"
+# The Space root gets converter/Dockerfile and converter/README.md (Space front matter: sdk docker,
+# app_port 7860). tests/ is NOT synced: HF rejects plain-git binary files (fixtures) and the image
+# doesn't need them (.dockerignore excludes tests/ too).
+name: Deploy converter to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "converter/**"
+      - ".github/workflows/deploy-hf.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hf
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: converter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: converter/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run test:fast
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE" ]; then
+            echo "::error::Set the HF_TOKEN and HF_SPACE repository secrets"; exit 1
+          fi
+          case "$HF_SPACE" in
+            */*) ;;
+            *) echo "::error::HF_SPACE must look like username/space-name"; exit 1 ;;
+          esac
+
+      - name: Sync converter/ to the Space repo
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }}
+          SRC_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$HF_TOKEN"
+          SPACE_DIR="$(mktemp -d)"
+          # The token is only used in the remote URL; git's output is not echoed with it.
+          git clone --depth 1 "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" "$SPACE_DIR" 2>&1 \
+            | sed "s/${HF_TOKEN}/***/g"
+          rsync -a --delete \
+            --exclude '.git/' \
+            --exclude 'node_modules/' \
+            --exclude 'dist/' \
+            --exclude 'tests/' \
+            --include '.env.example' --exclude '.env' --exclude '.env.*' \
+            --exclude '*.log' \
+            converter/ "$SPACE_DIR/"
+          test -f "$SPACE_DIR/Dockerfile"
+          grep -q '^sdk: docker' "$SPACE_DIR/README.md"
+          cd "$SPACE_DIR"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Space is already up to date"; exit 0
+          fi
+          git commit -q -m "Deploy converter from GitHub ${SRC_SHA}"
+          git push origin HEAD:main 2>&1 | sed "s/${HF_TOKEN}/***/g"

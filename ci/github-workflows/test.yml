@@ -1,0 +1,49 @@
+# CI for pull requests and pushes: worker tests + typecheck, converter typecheck + fast tests.
+# The heavy tool tests (LibreOffice, Calibre, ffmpeg, ...) are not run here; they skip themselves
+# when a tool is missing (`hasTool`) and are verified inside the Docker image instead:
+#   docker build -t file-converter converter
+#   docker run --rm --read-only --tmpfs /tmp:rw,exec,size=3g,uid=1000,gid=1000 -v $PWD:/repo:ro \
+#     -w /repo/converter --entrypoint sh file-converter -c "node --import tsx --test --test-concurrency=1 tests/*.test.ts"
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - name: Matrix sanity (89 sources / 887 conversions)
+        run: npx tsx ../scripts/check-matrix.ts
+
+  converter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: converter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: converter/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:fast

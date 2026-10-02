@@ -1,7 +1,7 @@
 # Handoff
 ## Project status
 - Phase 1 (Tasks 0–24): DONE.
-- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H4**. Next: **H5**.
+- **Phase 2 (HF Space + Cloudflare Workers, Tasks H0–H6): in progress.** Last completed: **H5**. Next: **H6**.
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -71,9 +71,10 @@
 - Converter Docker base: node:22-bookworm-slim + apt tools + a Python venv at /opt/py (fonttools, brotli, pysubs2, lottie, cairosvg, pillow-heif).
 
 ## Known issues / BLOCKED items
+- **BLOCKED (needs the repo owner):** GitHub Actions workflows are in `ci/github-workflows/`; move them to `.github/workflows/` (the agent's GitHub App token has no `workflows` permission).
 - **Matrix count mismatch:** the extracted matrix has 886 ✓ cells + TORRENT→TXT = **887**, but the bot advertises 874 (diff +13). Unique source formats = 89, which matches. Per section: document 84, video 197, image 207, audio 111, ebook 79, presentation 54, font 36, sheet 9, subtitle 110. The image is the source of truth, so all 887 are offered. We did not guess which 13 to drop.
 - Docker image: bookworm's IM6 may not read HEIC/AVIF; fallbacks `heif-convert` (libheif-examples) and `avifdec` (libavif-bin) are in the Dockerfile but untested there. Also check that `lottie_convert.py` is on PATH from /opt/py/bin.
-- Docker is not available in the dev sandbox, so the `converter/Dockerfile` has NOT been built yet. The first agent with Docker should run `docker build` and fix package names if any fail (e.g. `unrar` needs non-free, and the Dockerfile enables contrib/non-free).
+- (Resolved in H0/H4) The Docker image builds and passes the full suite; see the Phase 2 notes.
 - The Worker uses `AbortSignal.any` (needs compatibility_date ≥ 2024; it is set to 2024-11-01).
 
 ## Task checklist
@@ -109,7 +110,7 @@
 - [x] H2 - Worker: AsyncJobClient, thin callback flow, cron keep-alive
 - [x] H3 - Resource safety on the free Space (limits, disk checks, per-family timeouts, /health fields)
 - [x] H4 - Slim the image (measure, remove unneeded tools, record sizes) — 2.7 GB → 2.14 GB, 992/992 tests in the image
-- [ ] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
+- [x] H5 - CI/CD (deploy-hf.yml, deploy-worker.yml, test.yml)
 - [ ] H6 - Docs, smoke-test script, final verification
 
 ## Phase 2 notes
@@ -150,6 +151,7 @@
   - Kept (needed by registered conversions): ffmpeg, LO writer/calc/impress/draw, IM, gs, poppler, calibre, fontforge (+python3-fontforge, a hard dep), woff2, tesseract, librsvg2-bin, libheif-examples, libavif-bin, djvulibre, p7zip-full/rar, zip/unzip, the fonts.
   - Verified: the full suite in `fc:slim` (uid 1000, `--read-only`, /tmp tmpfs) → **992 tests, 0 failures, 0 skipped**; /health OK on :7860.
   - Biggest remaining items: libqt6webenginecore6 (150 MB, a Calibre dep needed for e-book → PDF), libreoffice-core, libllvm15 (mesa, pulled by Qt). Further cuts would need dropping functionality.
+- **H5 (CI/CD):** ⚠️ The workflows live in **`ci/github-workflows/`**: pushing `.github/workflows/*` was rejected (`refusing to allow a GitHub App to create or update workflow … without workflows permission`). The repo owner must run `git mv ci/github-workflows .github/workflows` with their own credentials (README → CI/CD). Files: `test.yml` (PR + push: worker typecheck/vitest/check-matrix; converter typecheck/build/`npm run test:fast` = jobs, server, resources, torrent, matrix-coverage, 68 tests, no external tools needed), `deploy-hf.yml` (converter/** on main: fast tests, then clone `https://user:$HF_TOKEN@huggingface.co/spaces/$HF_SPACE`, `rsync -a --delete` converter/ minus tests/ node_modules/ dist/ .env*, check Dockerfile + `sdk: docker` front matter, commit, push; the token is masked and sed-redacted from git output), `deploy-worker.yml` (worker/** on main: npm ci, test, typecheck, fails early if the KV id placeholder is still in wrangler.toml, `npx wrangler deploy` with CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID). The rsync/commit step was simulated locally against a bare git repo; the workflows have NOT run on GitHub yet (they need the secrets). tests/ is excluded from the Space because HF rejects binary fixtures without LFS/Xet, and the image doesn't use them. The README has a "CI/CD" section listing every GitHub secret.
 - Space front matter: `converter/README.md` (`sdk: docker`, `app_port: 7860`). The Space repo = the contents of `converter/`.
 
 ## Next agent instructions

@@ -87,6 +87,31 @@ BOT_TOKEN=... WEBHOOK_SECRET=... WORKER_URL=https://file-converter-bot.<account>
 ```
 This sets the webhook (with `secret_token`), the `/start` and `/menu` commands, and the commands menu button.
 
+## CI/CD (GitHub Actions)
+
+> **One-time step:** the workflow files are stored in `ci/github-workflows/` because the automation that
+> wrote them can't push to `.github/workflows/` (GitHub requires the `workflows` permission for that).
+> Activate them from a clone with your own credentials:
+> `git mv ci/github-workflows .github/workflows && git commit -m "ci: enable workflows" && git push`
+> (or create the three files in the GitHub web UI under `.github/workflows/`).
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `test.yml` | every PR and push to main | Worker: typecheck, vitest, check-matrix. Converter: typecheck, build, fast tests (`npm run test:fast`; the heavy tool tests run inside the Docker image instead). |
+| `deploy-hf.yml` | push to main touching `converter/**` (or manual) | Converter typecheck + fast tests, then clones the Space repo and `rsync --delete`s `converter/` into it (without `tests/`, `node_modules/`, `dist/`), commits and pushes. HF rebuilds the Docker image. |
+| `deploy-worker.yml` | push to main touching `worker/**` (or manual) | `npm ci`, `npm test`, `npm run typecheck`, then `npx wrangler deploy`. |
+
+Required **GitHub repository secrets** (Settings → Secrets and variables → Actions). Never commit them:
+
+| Secret | Used by | Value |
+|---|---|---|
+| `HF_TOKEN` | deploy-hf | Hugging Face access token with **write** permission |
+| `HF_SPACE` | deploy-hf | Space id, e.g. `username/file-converter` |
+| `CLOUDFLARE_API_TOKEN` | deploy-worker | Cloudflare API token (template "Edit Cloudflare Workers") |
+| `CLOUDFLARE_ACCOUNT_ID` | deploy-worker | Cloudflare account id |
+
+The runtime secrets are not stored in GitHub. They live on the platforms: **Space secrets** `CONVERTER_TOKEN`, `BOT_TOKEN`; **Worker secrets** `BOT_TOKEN`, `WEBHOOK_SECRET`, `CONVERTER_URL`, `CONVERTER_TOKEN` (`npx wrangler secret put`, kept across deploys).
+
 ## Tests
 ```bash
 cd worker && npm test && npm run typecheck              # vitest
