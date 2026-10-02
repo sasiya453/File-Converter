@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 4 - DOC → PDF, DOCX, TXT, RTF, ODT (commit 7c0c938)
+- Last completed task: 5 - DOCX → all ✓ document targets (commit 1c89496)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -29,6 +29,7 @@
 - `converter/src/handlers/pdf-image.ts` (Task 3): `pdf->png|jpg` via `pdftoppm -r 150` (max 200 pages). 1 page → a single image. More than 1 page → `converted.zip` (page-1.png, page-2.png …).
 - `worker/src/flow/callback.ts` `resultExt()`: if a sendDocument result comes back as `application/zip` (or `*.zip`), the user's filename gets `.zip` instead of `delivery.ext`.
 - `converter/src/handlers/document.ts` (Task 4): `LO_WRITER_FILTERS` (pdf/doc/docx/rtf/odt/txt) + generic `toLibreOffice(ctx)` handler; `doc->{pdf,docx,txt,rtf,odt}` registered with it. Fixture `tests/fixtures/sample.doc` ("Hello Converter", made with soffice from txt). Tests assert the text in each output (pdftotext / docx XML / odt content.xml).
+- Task 5: `docx->{pdf,doc,txt,rtf,odt}` via `toLibreOffice`, `docx->EBOOK_TARGETS` via `toEbook`. Fixture `tests/fixtures/sample.docx`. Tests: the `WRITER_ROWS` map (fixture → LO targets) in `tests/document.test.ts`, plus an ebook loop per source (DOC output text is checked with `soffice --cat`).
 - `converter/src/tools/calibre.ts`: `ebookConvert(input, workDir, ext, signal, extraArgs)` and `zipDir(dir, ...)`.
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
@@ -57,7 +58,7 @@
 - [x] Task 2 - PDF → TXT, RTF, EPUB, MOBI, AZW3, LRF, OEB, PDB, FB2, RB
 - [x] Task 3 - PDF → PNG, JPG (multi-page zip / first page)
 - [x] Task 4 - DOC → PDF, DOCX, TXT, RTF, ODT
-- [ ] Task 5 - DOCX → all ✓ document targets
+- [x] Task 5 - DOCX → all ✓ document targets
 - [ ] Task 6 - TXT and TEXT → all ✓ document targets
 - [ ] Task 7 - RTF → all ✓ document targets
 - [ ] Task 8 - ODT → all ✓ document targets
@@ -79,9 +80,9 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 5 - DOCX → all ✓ document targets**. Matrix `document.rows.docx` = pdf, doc, txt, rtf, odt, epub, mobi, azw3, lrf, oeb, pdb, fb2, rb (PNG/JPG are ✗). Check with `node -e 'console.log(require("./worker/src/matrix/matrix.json").sections.document.rows.docx)'`.
-- Suggested: `register("docx", ["pdf","doc","txt","rtf","odt"], toLibreOffice)` + `register("docx", EBOOK_TARGETS, toEbook)` (Calibre reads docx). Fixture: make `sample.docx` with `soffice --headless --convert-to docx sample.txt`. Reuse the DOC_CHECKS-style loop in `converter/tests/document.test.ts`; the ebook tests use the `EBOOK_CHECKS` map (skip if no ebook-convert).
-- Tasks 6–8 (TXT/TEXT, RTF, ODT) follow the same pattern. Note: the TEXT row is a matrix source key; check how intake maps it (worker/src/flow/detect*).
-- Sandbox state (this chat): soffice, poppler, ffmpeg present. pdf2docx needed `pip install pdf2docx` (without it the pdf->rtf test fails because the LO Draw fallback has no RTF export). Calibre NOT installed (the ebook tests skip; `sudo apt-get install -y calibre` takes about 10 min). Docker is unavailable.
+- Start at: **Task 6 - TXT and TEXT → all ✓ document targets**. Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.document.rows;console.log(r.txt,r.text)'`.
+- Pattern (Tasks 6–8): `register(src, [LO targets in row], toLibreOffice)` + `register(src, EBOOK_TARGETS, toEbook)` in `converter/src/handlers/document.ts`. Add the fixture to `WRITER_ROWS` in `tests/document.test.ts` and add an ebook loop for it. A fixture can be made from `/tmp` with `soffice --headless --convert-to <ext> sample.txt`.
+- TEXT: work out what source "TEXT" is (see worker/src/flow detection: maybe a Telegram text message or a .text file). The converter receives `from` = the matrix key, so register `text` too. LO may need `--infilter="Text (encoded):UTF8"` for .txt/.text input (pass it via the soffice extraArgs; this is argv, so no quotes).
+- Sandbox state (this chat): soffice, poppler, ffmpeg, pdf2docx (pip) and calibre (apt; the dpkg error is harmless) were all installed, and all 41 converter tests pass. A new sandbox may need `pip install pdf2docx` and `sudo apt-get install -y calibre` (about 2–10 min) again. Docker is unavailable.
 - Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test`, `cd worker && npx vitest run`.
 - Gotcha: `git push` needs `setup_github_environment` first in a new chat.
