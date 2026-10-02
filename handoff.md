@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 16 - Audio → audio (commit b98e1f6)
+- Last completed task: 17 - Audio → AUDIONOTE (commit 9ba6013)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -42,6 +42,7 @@
 - Task 14 (in `image.ts`): `ffmpegReadable(ctx)` normalises the input for ffmpeg: GIF as is, animated WebP → coalesced GIF (ffmpeg can't decode animated WebP), anything else → PNG32 of frame 0. `imageToApng` (`-f apng -plays 0` → `converted.apng`, MIME image/apng; still images become a 2-frame identical APNG so the acTL chunk exists) is registered for the 9 raster rows except ICO. `imageToMp4` (H.264 yuv420p faststart, transparency on white, even size; still input → 3 s clip) is registered for gif only. **GIFZ: no raster row has ✓; only TGS (Task 15).** image.test.ts: 133 tests.
 - Task 15: `converter/src/handlers/image-special.ts`: `SPECIAL_ROWS` (a copy of the matrix rows; a test asserts it equals matrix.json). Each source is normalised and then sent through the generic image.ts handlers (`generic()`): HEIC/AVIF/PSD → IM with an explicit coder (`HEIC:in[0]`; fallbacks `heif-convert`, `avifdec`) → PNG32. EPS → Ghostscript (`-dSAFER -dEPSCrop pngalpha 150 dpi`; EPS→PDF uses gs pdfwrite = vector). SVG → `rsvg-convert` PNG (SVG→PDF uses rsvg-convert -f pdf = vector). APNG → ffmpeg `-f apng` (frame 0 for still targets; →GIF/WEBP/MP4 keep the animation via palettegen GIF). TGS → gunzip (16 MB cap, 422 if invalid) → `lottie_convert.py` GIF → **re-encoded with ffmpeg** (python-lottie GIFs have palette indices that ImageMagick rejects) → gif / webp (animated, IM) / apng / gifz. GIFZ zip = `animation.gif` + `frames/frame-000.png…`. Fixtures `sample.{heic,avif,psd,eps,svg,apng,tgs}` (the heic/avif/psd/eps/svg ones contain the text "Hello Converter" for OCR). `tests/image-special.test.ts`: 81 tests. **The IMAGE section is now complete (207).**
 - Task 16: `converter/src/handlers/audio.ts`: `AUDIO_SOURCES` (11 rows incl. amr), `AUDIO_TARGETS` (10), `AUDIO_ARGS` table (mp3 = MP3_ARGS, ogg/oga = libvorbis q5 `-f ogg`, opus = libopus 128k 48 kHz `-f opus`, wav = pcm_s16le, flac, wma = wmav2 `-f asf`, m4a = aac `-f ipod` faststart, aac = ADTS, aiff = pcm_s16be). `encodeAudio(ext, args)` is a generic handler (ffprobe check → 422 "the file has no audio stream"; `-map 0:a:0 -vn` drops cover art; metadata kept). Exported `hasAudioStream()`. Every non-diagonal audio→audio cell is ✓. MIME types added for opus/flac/wma/oga/m4a/aac/aiff/amr. Fixtures `sample.{mp3,ogg,opus,wav,flac,wma,oga,m4a,aac,aiff,amr}` (0.5 s 440 Hz mono). The AMR fixture was made with `sox -t amr-nb` because the sandbox ffmpeg has no AMR encoder, only the decoder (that is all the bot needs, since AMR is only a source). `tests/audio.test.ts`: 103 tests, ~50 s.
+- Task 17 (in `audio.ts`): `register(AUDIO_SOURCES, "audionote", encodeAudio("ogg", VOICE_ARGS))` makes OGG/Opus mono 48 kHz 48k voip `converted.ogg`, which the Worker sends via sendVoice. There is no duration cap (Telegram voice has no hard length limit; the 50 MB output cap still applies). audio.test.ts: 114 tests. **The AUDIO section is now complete (111).**
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -84,7 +85,7 @@
 - [x] Task 14 - Image → MP4, GIFZ, APNG (only ✓)
 - [x] Task 15 - Special image sources: TGS, HEIC, AVIF, PSD, EPS, SVG, APNG
 - [x] Task 16 - Audio → audio
-- [ ] Task 17 - Audio → AUDIONOTE
+- [x] Task 17 - Audio → AUDIONOTE
 - [ ] Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF
 - [ ] Task 19 - CBR, CBZ, DJVU rows
 - [ ] Task 20 - Presentations
@@ -94,8 +95,8 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 17 - Audio → AUDIONOTE** (all 11 audio rows have `audionote` ✓). Plan: in `converter/src/handlers/audio.ts` add `register(AUDIO_SOURCES, "audionote", encodeAudio("ogg", VOICE_ARGS))` (VOICE_ARGS is in `converter/src/tools/audio-args.ts`; the Worker already maps audionote → sendVoice, ext ogg). Add tests to `tests/audio.test.ts` (ogg container, opus codec, 1 channel, 48 kHz) for every audio fixture. Telegram voice limit: consider a max duration (optional).
-- Then Task 18 (eBooks): reuse `toEbook`/`EBOOK_TARGETS` and `toLibreOffice` from `converter/src/handlers/document.ts` and `ebookConvert` from `converter/src/tools/calibre.ts`. Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.ebook.rows;for(const k in r)console.log(k,r[k].join(","))'`.
+- Start at: **Task 18 - eBook → eBook/PDF/DOCX/TXT/RTF** (rows epub, mobi, azw3, lrf, pdb, fb2, djvu; leave cbr/cbz/djvu-specific work to Task 19 if djvu needs djvulibre). Make tiny fixtures with Calibre from `tests/fixtures/sample.txt` (`ebook-convert sample.txt sample.epub` etc.), and assert "Hello Converter" in each output.
+- Reuse `toEbook`/`EBOOK_TARGETS` and `toLibreOffice` from `converter/src/handlers/document.ts` and `ebookConvert` from `converter/src/tools/calibre.ts`. Check the rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.ebook.rows;for(const k in r)console.log(k,r[k].join(","))'`.
 - Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`.
 - Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document/ebook tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). sox (`sudo apt-get install -y sox libsox-fmt-all`) is only needed to regenerate the AMR fixture. Docker is unavailable.
 - Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/audio.test.ts`. Worker: `cd worker && npx vitest run`.
