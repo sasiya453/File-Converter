@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 2 - PDF → TXT, RTF, EPUB, MOBI, AZW3, LRF, OEB, PDB, FB2, RB (commit b8ac4f5)
+- Last completed task: 3 - PDF → PNG, JPG (commit b5e9503)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -26,12 +26,15 @@
 - `converter/src/registry.ts`: `register(from|from[], to|to[], handler)`. Handler modules go in `converter/src/handlers/*.ts` and must be imported in `converter/src/handlers/index.ts`.
 - `converter/src/tools/libreoffice.ts`: `soffice(input, workDir, filter, signal, extraArgs)` runs headless LO with a per-job profile (`-env:UserInstallation` inside workDir) and returns the output path. The filter spec has NO quotes (no shell), e.g. `"docx:MS Word 2007 XML"`.
 - `converter/src/handlers/document.ts`: `pdf->docx` (pdf2docx first, falling back to LO `--infilter=writer_pdf_import`). Also (Task 2): `pdf->txt` (pdftotext -layout; 422 if no text, i.e. a scanned PDF), `pdf->rtf` (pdf2docx → LO rtf), `pdf->{epub,mobi,azw3,lrf,oeb,pdb,fb2,rb}` via the generic `toEbook` handler + `EBOOK_TARGETS` (reuse these for DOCX/TXT/RTF/ODT rows).
+- `converter/src/handlers/pdf-image.ts` (Task 3): `pdf->png|jpg` via `pdftoppm -r 150` (max 200 pages). 1 page → a single image. More than 1 page → `converted.zip` (page-1.png, page-2.png …).
+- `worker/src/flow/callback.ts` `resultExt()`: if a sendDocument result comes back as `application/zip` (or `*.zip`), the user's filename gets `.zip` instead of `delivery.ext`.
 - `converter/src/tools/calibre.ts`: `ebookConvert(input, workDir, ext, signal, extraArgs)` and `zipDir(dir, ...)`.
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
 ## Decisions & assumptions
 - matrix.json was extracted from the PNG by pixel colour (green ✓ / pink ✗ cells), and then checked visually against zoomed crops. Keys are lower-case. The matrix columns "AUDIO NOTE" and "AUDIONOTE" are both stored as `audionote`. TORRENT was added as `document.rows.torrent = ["txt"]`.
+- PDF → PNG/JPG (decision): no extra "all pages" button. A single-page PDF returns the image and a multi-page PDF returns a ZIP of all pages (150 DPI). This keeps the keyboard = matrix.
 - OEB output is a directory: the converter zips it (`converted.oeb.zip`) and `delivery.ts` maps `oeb` → ext `oeb.zip` (so the user gets `<name>.oeb.zip`).
 - PDF → RTF goes through pdf2docx then LO (LO's direct PDF import is Draw-based and gives text boxes, not flowing text).
 - GIFZ = animated GIF frames packaged as a ZIP (assumption, as the brief says). In the matrix only TGS → GIFZ is ✓.
@@ -51,7 +54,7 @@
 - [x] Task 0 - Scaffold: monorepo, wrangler, webhook+secret, /start & Menu, intake/detection, 20MB guard, KV session, matrix.json + check-matrix, ConverterClient, converter skeleton (/health, registry), Dockerfile, README, set-webhook
 - [x] Task 1 - PDF → DOCX end-to-end (keyboard → converter → reply)
 - [x] Task 2 - PDF → TXT, RTF, EPUB, MOBI, AZW3, LRF, OEB, PDB, FB2, RB
-- [ ] Task 3 - PDF → PNG, JPG (multi-page zip / first page)
+- [x] Task 3 - PDF → PNG, JPG (multi-page zip / first page)
 - [ ] Task 4 - DOC → PDF, DOCX, TXT, RTF, ODT
 - [ ] Task 5 - DOCX → all ✓ document targets
 - [ ] Task 6 - TXT and TEXT → all ✓ document targets
@@ -75,9 +78,9 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 3 - PDF → PNG, JPG** (multi-page: first page by default; ZIP of all pages when more than 1 page. The simplest option: always return a single image for 1-page PDFs and a ZIP for multi-page ones. If you do this, record the decision and make `delivery.ts`/filename handle a `.zip` result. Note that the Worker currently uses `delivery.ext` for the filename, so consider letting the converter's Content-Disposition filename extension override it).
-- Suggested tool: `pdftoppm -r 150 -png|-jpeg input.pdf page` (poppler), then `zip` via `run()`. Add a multi-page fixture (`tests/fixtures/sample-2p.pdf`, e.g. made with `soffice` or Ghostscript) for the ZIP case.
-- Handlers: `converter/src/handlers/document.ts` (or a new `pdf-image.ts`, imported in `handlers/index.ts`). Tests: `converter/tests/document.test.ts`.
-- Sandbox state (this chat): soffice 25.2, pdftotext/pdftoppm, ffmpeg, calibre 8.5 (`sudo apt-get install -y calibre` took about 10 min. dpkg errors on python3-matplotlib are harmless), and pdf2docx (`pip install pdf2docx`). A new sandbox may need these re-installed. Docker is unavailable.
-- Run `npm ci` in `worker/` and `converter/` first (node_modules are not committed).
+- Start at: **Task 4 - DOC → PDF, DOCX, TXT, RTF, ODT** (matrix `document.rows.doc` = exactly these 5; DOC → DOC/EPUB…/PNG/JPG are ✗ and already hidden by the Worker).
+- Suggested: one generic LibreOffice handler in `converter/src/handlers/document.ts`, e.g. `LO_FILTERS = { pdf: "pdf:writer_pdf_Export", docx: "docx:MS Word 2007 XML", doc: "doc:MS Word 97", rtf: "rtf:Rich Text Format", odt: "odt:writer8", txt: "txt:Text (encoded):UTF8" }` and `toLibreOffice(ctx)`. Make it reusable for Tasks 5–8 (DOCX/TXT/RTF/ODT rows, plus `toEbook` for the ebook targets. Calibre reads docx/txt/rtf/odt directly; for DOC go via LO→docx first if ever needed).
+- Fixture: create `converter/tests/fixtures/sample.doc` with `soffice --headless --convert-to doc` from a tiny text/odt containing "Hello Converter". Assert the text is present in the outputs (pdftotext for pdf, `textOf` for docx).
+- Sandbox state (this chat): soffice 25.2, poppler (pdftotext/pdftoppm), gs, ffmpeg, calibre 8.5 (`sudo apt-get install -y calibre` took about 10 min. dpkg errors on python3-matplotlib are harmless), and pdf2docx (`pip install pdf2docx`). A new sandbox may need these re-installed. Docker is unavailable.
+- Run `npm ci` in `worker/` and `converter/` first (node_modules are not committed). Tests: `cd converter && npm test`, `cd worker && npx vitest run`.
 - Gotcha: `git push` needs `setup_github_environment` first in a new chat.
