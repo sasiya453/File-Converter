@@ -1,6 +1,6 @@
 # Handoff
 ## Project status
-- Last completed task: 8 - ODT → all ✓ document targets (commit a763f4e)
+- Last completed task: 9 - Video → video containers (commit 1c2669d)
 - Current branch: main (push directly to main, as the project brief says)
 
 ## Environment / how to run
@@ -34,6 +34,7 @@
 - Task 6: `txt|text->{pdf,doc,docx,rtf,odt}` via `textToLibreOffice` (LO `--infilter=Text (encoded):UTF8`), `txt|text->EBOOK_TARGETS` via `textToEbook`. `.text` input is copied to `input-text.txt` first (`asTxt`) because LO/Calibre pick the import filter by extension. Fixtures `sample.txt`/`sample.text` (UTF-8). There is also a UTF-8 round-trip test.
 - Task 7: `rtf->{pdf,doc,docx,txt,odt}` via `toLibreOffice`, `rtf->EBOOK_TARGETS` via `toEbook`. Fixture `sample.rtf` (made from sample.docx with soffice).
 - Task 8: `odt->{pdf,doc,docx,txt,rtf}` via `toLibreOffice`, `odt->EBOOK_TARGETS` via `toEbook`. Fixture `sample.odt`. The DOCUMENT section is now complete except TORRENT (Task 24).
+- Task 9: `converter/src/handlers/video.ts`: `VIDEO_SOURCES` (14 rows), `VIDEO_CONTAINER_TARGETS` (10), `VIDEO_ARGS` table (muxer + codecs per target; always re-encodes: H.264/AAC for mp4/mov/mkv/flv/ts/3gp, MPEG-4 Part 2 + MP3 for avi, WMV2/WMA2 for wmv, MPEG-2/MP2 for mpg, VP8/Opus for webm), an even-size scale filter, `-map 0:v:0 -map 0:a:0?` (audio optional). Exported `ffmpeg(args, ctx)` helper (reuse it in Tasks 10/11/16). Non-diagonal ✗ in the rows: 3gpp→3gp, mpeg→mpg, vob→mkv (the `SKIP` map). Fixtures `tests/fixtures/sample.<14 video exts>` (0.5 s 64x48 testsrc + sine). `tests/video.test.ts` checks registry == matrix for container targets and ffprobes each output (format, video+audio streams); 128 tests pass in ~50 s.
 - Tests: `converter/tests/helpers.ts` → `convertFixture(fixture, to)` runs a registered handler on `tests/fixtures/<file>` in a temp dir; `hasTool(cmd)` is used to skip tests when a tool is missing. Fixture: `tests/fixtures/sample.pdf` (text "Hello Converter").
 - Handler signature: `(ctx: {input, workDir, from, to, options, signal}) => {path, contentType, filename}`. Use `mimeFor(ext)` from `src/mime.ts`.
 
@@ -66,7 +67,7 @@
 - [x] Task 6 - TXT and TEXT → all ✓ document targets
 - [x] Task 7 - RTF → all ✓ document targets
 - [x] Task 8 - ODT → all ✓ document targets
-- [ ] Task 9 - Video → video containers
+- [x] Task 9 - Video → video containers
 - [ ] Task 10 - Video → GIF, VIDEONOTE, STREAM
 - [ ] Task 11 - Video → MP3, AUDIO NOTE
 - [ ] Task 12 - Image raster → raster
@@ -84,9 +85,8 @@
 - [ ] Task 24 - TORRENT → TXT + final hardening, full-matrix verification, final docs
 
 ## Next agent instructions
-- Start at: **Task 9 - Video → video containers**. Check rows with `node -e 'const r=require("./worker/src/matrix/matrix.json").sections.video.rows;for(const k in r)console.log(k,r[k].join(","))'`. Plan: new `converter/src/handlers/video.ts` (ffmpeg via `run`, per-target codec args table, `-y -nostdin -hide_banner`), import it in `handlers/index.ts`, generate a tiny fixture with `ffmpeg -f lavfi -i testsrc=d=1:s=64x64 -f lavfi -i sine=d=1 ...`. Check that `delivery.ts` maps video targets to sendDocument/sendVideo.
-- Pattern (Tasks 6–8): `register(src, [LO targets in row], toLibreOffice)` + `register(src, EBOOK_TARGETS, toEbook)` in `converter/src/handlers/document.ts`. Add the fixture to `WRITER_ROWS` in `tests/document.test.ts` and add an ebook loop for it. A fixture can be made from `/tmp` with `soffice --headless --convert-to <ext> sample.txt`.
-- (Task 6 done) TEXT: work out what source "TEXT" is (see worker/src/flow detection: maybe a Telegram text message or a .text file). The converter receives `from` = the matrix key, so register `text` too. LO may need `--infilter="Text (encoded):UTF8"` for .txt/.text input (pass it via the soffice extraArgs; this is argv, so no quotes).
-- Sandbox state (this chat): soffice, poppler, ffmpeg, pdf2docx (pip) and calibre (apt; the dpkg error is harmless) were all installed, and all 94 converter tests pass (after Task 8; the full run takes about 2 min, so use `timeout 900` and/or run it in the background). A new sandbox may need `pip install pdf2docx` and `sudo apt-get install -y calibre` (about 2–10 min) again. Docker is unavailable.
-- Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test`, `cd worker && npx vitest run`.
+- Start at: **Task 10 - Video → GIF, VIDEONOTE, STREAM**. Add to `converter/src/handlers/video.ts` (reuse `ffmpeg()`, `VIDEO_SOURCES`; every video row has ✓ for gif, videonote, stream). Plan: gif = palettegen/paletteuse, fps 10, width ≤ 480, cap duration (e.g. 15 s) to stay under 50 MB; videonote = `crop=min(iw\,ih):min(iw\,ih),scale=640:640`, H.264/AAC, `-t 60`, faststart, `converted.mp4`; stream = H.264/AAC MP4 `+faststart` (max 1280 wide). `delivery.ts` already maps videonote→sendVideoNote and stream→sendVideo(supports_streaming), so no Worker change is needed. Extend `tests/video.test.ts` (ffprobe: gif format; videonote 640x640 and ≤60 s; stream mp4 with moov before mdat).
+- Patterns from earlier tasks: `register(src, targets, handler)`; tests use `convertFixture(fixture, to)` + `hasTool()`. The document handlers are in `converter/src/handlers/document.ts`.
+- Sandbox: ffmpeg is preinstalled. soffice/calibre/pdf2docx may need reinstalling for the document tests (`pip install pdf2docx`, `sudo apt-get install -y calibre libreoffice`). Docker is unavailable.
+- Run `npm ci` in `worker/` and `converter/` first. Tests: `cd converter && npm test` (the full run takes several minutes, so use `timeout 900`), or a single file: `node --import tsx --test tests/video.test.ts`. Worker: `cd worker && npx vitest run`.
 - Gotcha: `git push` needs `setup_github_environment` first in a new chat.
