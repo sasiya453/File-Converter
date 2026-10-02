@@ -1,0 +1,4 @@
+BOT_TOKEN=123456:ABC-your-bot-token
+WEBHOOK_SECRET=long-random-string-a-z-A-Z-0-9-_
+CONVERTER_URL=http://localhost:8080
+CONVERTER_TOKEN=another-long-random-string

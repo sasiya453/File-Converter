@@ -1,0 +1,15 @@
+name = "file-converter-bot"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Per-chat session state + rate-limit counters.
+# Create with: npx wrangler kv namespace create SESSIONS  (then paste the id below)
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+RATE_LIMIT_PER_MIN = "5"
+
+# Secrets (set with `npx wrangler secret put <NAME>`, never commit):
+#   BOT_TOKEN, WEBHOOK_SECRET, CONVERTER_URL, CONVERTER_TOKEN
