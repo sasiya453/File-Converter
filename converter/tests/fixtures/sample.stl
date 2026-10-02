@@ -1,0 +1,5 @@
+$FontName = Arial
+$FontSize = 30
+
+00:00:01:00 , 00:00:02:12 , Hello Converter
+00:00:03:00 , 00:00:04:05 , Second line ü | with two rows

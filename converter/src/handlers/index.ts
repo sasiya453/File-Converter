@@ -10,4 +10,5 @@ import "./comic.js";
 import "./presentation.js";
 import "./font.js";
 import "./sheet.js";
+import "./subtitle.js";
 export {};

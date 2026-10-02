@@ -1,0 +1,12 @@
+{QTtext} {font:Tahoma} {plain} {size:20} {textColor: 65535, 65535, 65535}
+{backColor: 0, 0, 0} {justify:center} {timeScale:1000} {width:320} {height:60}
+{timeStamps:absolute} {language:0} {textEncoding:0}
+[00:00:01.000]
+Hello Converter
+[00:00:02.500]
+
+[00:00:03.000]
+Second line ü
+with two rows
+[00:00:04.200]
+

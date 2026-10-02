@@ -11,8 +11,8 @@ export const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
 export const hasTool = (cmd: string) => spawnSync("sh", ["-c", `command -v ${cmd}`]).status === 0;
 
 /** Run a registered handler on a fixture in a fresh temp dir; returns output + cleanup. */
-export async function convertFixture(fixture: string, to: string, options: Record<string, unknown> = {}) {
-  const from = extname(fixture).slice(1).toLowerCase();
+export async function convertFixture(fixture: string, to: string, options: Record<string, unknown> = {}, fromOverride?: string) {
+  const from = fromOverride ?? (fixture.toLowerCase().endsWith(".qt.txt") ? "qt.txt" : extname(fixture).slice(1).toLowerCase());
   const handler = lookup(from, to);
   if (!handler) throw new Error(`no handler ${from}->${to}`);
   const workDir = await mkdtemp(join(tmpdir(), "test-job-"));
