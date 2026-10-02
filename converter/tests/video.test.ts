@@ -73,3 +73,26 @@ for (const src of VIDEO_SOURCES) for (const to of SPECIAL) {
     } finally { await cleanup(); }
   });
 }
+
+// ---- Task 11: MP3, AUDIO NOTE ----
+for (const src of VIDEO_SOURCES) for (const to of ["mp3", "audionote"]) {
+  test(`${src} -> ${to}`, { skip: !hasTool("ffmpeg") && "ffmpeg not installed" }, async () => {
+    assert.ok(rows[src]!.includes(to) && lookup(src, to), "matrix + registry");
+    const { out, cleanup } = await convertFixture(`sample.${src}`, to);
+    try {
+      const info = probe(out.path);
+      assert.equal(info.streams.length, 1);
+      const a = info.streams[0];
+      if (to === "mp3") {
+        assert.equal(a.codec_name, "mp3"); assert.equal(out.filename, "converted.mp3");
+      } else {
+        assert.equal(info.format.format_name, "ogg"); assert.equal(a.codec_name, "opus");
+        assert.equal(a.channels, 1); assert.equal(out.filename, "converted.ogg");
+      }
+    } finally { await cleanup(); }
+  });
+}
+
+test("video without audio -> mp3 gives 422", { skip: !hasTool("ffmpeg") && "ffmpeg not installed" }, async () => {
+  await assert.rejects(convertFixture("noaudio.mp4", "mp3"), (e: { status?: number }) => e.status === 422);
+});

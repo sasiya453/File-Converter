@@ -6,6 +6,7 @@ import { register } from "../registry.js";
 import { run } from "../run.js";
 import { mimeFor } from "../mime.js";
 import { HttpError, type JobContext, type JobOutput } from "../types.js";
+import { MP3_ARGS, VOICE_ARGS } from "../tools/audio-args.js";
 
 export const VIDEO_SOURCES = ["mp4", "avi", "wmv", "mkv", "3gp", "3gpp", "mpg", "mpeg", "webm", "ts", "mov", "flv", "asf", "vob"];
 export const VIDEO_CONTAINER_TARGETS = ["mp4", "avi", "wmv", "mkv", "3gp", "mpg", "webm", "ts", "mov", "flv"];
@@ -83,3 +84,22 @@ export async function videoToStream(ctx: JobContext): Promise<JobOutput> {
 register(VIDEO_SOURCES, "gif", videoToGif);
 register(VIDEO_SOURCES, "videonote", videoToVideoNote);
 register(VIDEO_SOURCES, "stream", videoToStream);
+
+// ---- Task 11: MP3, AUDIO NOTE (audio extraction) ----
+async function hasAudio(ctx: JobContext): Promise<boolean> {
+  const { stdout } = await run("ffprobe", ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", ctx.input],
+    { cwd: ctx.workDir, signal: ctx.signal });
+  return stdout.trim().length > 0;
+}
+
+function extractAudio(ext: string, args: string[]) {
+  return async (ctx: JobContext): Promise<JobOutput> => {
+    if (!(await hasAudio(ctx))) throw new HttpError(422, "the video has no audio track");
+    const out = join(ctx.workDir, `converted.${ext}`);
+    await ffmpeg(["-i", ctx.input, "-map", "0:a:0", "-vn", "-sn", "-dn", ...args, out], ctx);
+    return { path: out, contentType: mimeFor(ext), filename: `converted.${ext}` };
+  };
+}
+
+register(VIDEO_SOURCES, "mp3", extractAudio("mp3", MP3_ARGS));
+register(VIDEO_SOURCES, "audionote", extractAudio("ogg", VOICE_ARGS));
