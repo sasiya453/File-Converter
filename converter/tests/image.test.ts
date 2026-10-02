@@ -45,3 +45,51 @@ for (const src of RASTER_SOURCES) for (const to of rows[src]!.filter((t) => RAST
     } finally { await cleanup(); }
   });
 }
+
+// ---- Task 13: PDF, SENDPHOTO, OCR ----
+const SPECIAL13 = ["pdf", "sendphoto", "ocr"];
+
+test("pdf/sendphoto/ocr registry matches the matrix for raster rows", () => {
+  for (const src of RASTER_SOURCES) for (const to of SPECIAL13) {
+    assert.equal(!!lookup(src, to), rows[src]!.includes(to), `${src}->${to}`);
+  }
+});
+
+for (const src of RASTER_SOURCES) for (const to of SPECIAL13.filter((t) => rows[src]!.includes(t))) {
+  const tool = to === "ocr" ? hasTool("tesseract") : hasIM;
+  test(`${src} -> ${to}`, { skip: !tool && "tool not installed" }, async () => {
+    const fixture = to === "ocr" ? `ocr.${src}` : `sample.${src}`;
+    const { out, cleanup } = await convertFixture(fixture, to);
+    try {
+      const head = readFileSync(out.path);
+      if (to === "pdf") {
+        assert.equal(head.subarray(0, 5).toString(), "%PDF-");
+        assert.equal(out.filename, "converted.pdf");
+      } else if (to === "sendphoto") {
+        assert.deepEqual([...head.subarray(0, 3)], [0xff, 0xd8, 0xff], "JPEG magic");
+        assert.equal(out.filename, "converted.jpg");
+        assert.equal(inspect(out.path).frames, 1);
+      } else {
+        assert.match(head.toString(), /Hello\s+Converter/i);
+        assert.equal(out.filename, "converted.txt");
+      }
+    } finally { await cleanup(); }
+  });
+}
+
+test("sendphoto downscales big images to 2560 px", { skip: !hasIM && "no ImageMagick" }, async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "sp-"));
+  try {
+    const input = join(dir, "input.png");
+    spawnSync(imBinary(), ["-size", "4000x1000", "xc:red", input]);
+    const out = await lookup("png", "sendphoto")!({ input, workDir: dir, from: "png", to: "sendphoto", options: {}, signal: AbortSignal.timeout(30_000) });
+    assert.deepEqual([inspect(out.path).w, inspect(out.path).h], [2560, 640]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("ocr on a blank image returns 422", { skip: !hasTool("tesseract") && "no tesseract" }, async () => {
+  await assert.rejects(convertFixture("sample.bmp", "ocr"), (e: { status?: number }) => e.status === 422);
+});
