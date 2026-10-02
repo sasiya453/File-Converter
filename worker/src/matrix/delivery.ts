@@ -23,6 +23,7 @@ export function deliveryFor(section: Section, target: string): Delivery {
     case "sendphoto": return { method: "sendPhoto", field: "photo", ext: "jpg" };
     case "ocr": return DOC("txt");
     case "gifz": return DOC("zip");
+    case "oeb": return DOC("oeb.zip"); // OEB is a directory; the converter zips it
     case "qt.txt": return DOC("qt.txt");
     default: return DOC(section === "video" && t === "mp3" ? "mp3" : t);
   }

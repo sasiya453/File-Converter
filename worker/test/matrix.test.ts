@@ -56,5 +56,6 @@ describe("delivery", () => {
     expect(deliveryFor("image", "sendphoto").method).toBe("sendPhoto");
     expect(deliveryFor("image", "ocr").ext).toBe("txt");
     expect(deliveryFor("image", "gifz").ext).toBe("zip");
+    expect(deliveryFor("document", "oeb").ext).toBe("oeb.zip");
   });
 });
