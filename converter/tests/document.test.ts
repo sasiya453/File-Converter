@@ -94,6 +94,7 @@ const WRITER_ROWS: Record<string, string[]> = {
   "sample.docx": ["pdf", "doc", "txt", "rtf", "odt"],
   "sample.txt": ["pdf", "doc", "docx", "rtf", "odt"],
   "sample.text": ["pdf", "doc", "docx", "rtf", "odt"],
+  "sample.rtf": ["pdf", "doc", "docx", "txt", "odt"],
 };
 DOC_CHECKS.doc = async (p) => spawnSync("soffice", ["--headless", "--cat", p]).stdout.toString();
 for (const [fixture, targets] of Object.entries(WRITER_ROWS)) for (const to of targets) {
@@ -109,7 +110,7 @@ for (const [fixture, targets] of Object.entries(WRITER_ROWS)) for (const to of t
 }
 
 // Task 5/6: DOCX, TXT, TEXT -> e-book targets (Calibre).
-for (const src of ["docx", "txt", "text"]) for (const [to, check] of Object.entries(EBOOK_CHECKS)) {
+for (const src of ["docx", "txt", "text", "rtf"]) for (const [to, check] of Object.entries(EBOOK_CHECKS)) {
   test(`${src} -> ${to}`, { skip: !canCalibre && "calibre not installed" }, async () => {
     const { out, cleanup } = await convertFixture(`sample.${src}`, to);
     try {

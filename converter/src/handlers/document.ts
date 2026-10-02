@@ -115,3 +115,7 @@ export async function textToEbook(ctx: JobContext): Promise<JobOutput> {
 
 register(["txt", "text"], ["pdf", "doc", "docx", "rtf", "odt"], textToLibreOffice);
 register(["txt", "text"], EBOOK_TARGETS, textToEbook);
+
+// Task 7: RTF row (matrix: PDF, DOC, DOCX, TXT, ODT + all e-book targets).
+register("rtf", ["pdf", "doc", "docx", "txt", "odt"], toLibreOffice);
+register("rtf", EBOOK_TARGETS, toEbook);
